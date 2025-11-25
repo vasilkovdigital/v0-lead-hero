@@ -5,12 +5,13 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Copy, ExternalLink, Users, Code2, Settings, AlertCircle } from "lucide-react"
+import { Copy, ExternalLink, Users, Code2, Settings, AlertCircle, Plus, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { createUserForm } from "@/app/actions/forms"
 
 interface Form {
   id: string
@@ -25,7 +26,10 @@ interface Form {
 export function FormsManager() {
   const [form, setForm] = useState<Form | null>(null)
   const [userId, setUserId] = useState<string>("")
+  const [userEmail, setUserEmail] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [showEmbedDialog, setShowEmbedDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [formName, setFormName] = useState("")
@@ -42,6 +46,7 @@ export function FormsManager() {
 
     if (user) {
       setUserId(user.id)
+      setUserEmail(user.email || "")
 
       const { data: existingForm } = await supabase.from("forms").select("*").eq("owner_id", user.id).single()
 
@@ -51,6 +56,27 @@ export function FormsManager() {
       }
     }
     setLoading(false)
+  }
+
+  const createForm = async () => {
+    if (!userId || !userEmail) return
+
+    setCreating(true)
+    setError(null)
+
+    const result = await createUserForm(userId, userEmail)
+
+    if (result.error) {
+      setError(result.error)
+      setCreating(false)
+      return
+    }
+
+    if (result.form) {
+      setForm(result.form)
+      setFormName(result.form.name)
+    }
+    setCreating(false)
   }
 
   const updateFormName = async () => {
@@ -97,7 +123,26 @@ export function FormsManager() {
         <CardContent className="flex flex-col items-center justify-center py-12">
           <Users className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-lg font-medium mb-2">Форма не найдена</p>
-          <p className="text-sm text-muted-foreground">Форма будет создана автоматически при первом входе</p>
+          <p className="text-sm text-muted-foreground mb-6">Создайте форму для сбора лидов</p>
+          {error && (
+            <Alert variant="destructive" className="mb-4 max-w-md">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <Button onClick={createForm} disabled={creating}>
+            {creating ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Создание...
+              </>
+            ) : (
+              <>
+                <Plus className="mr-2 h-4 w-4" />
+                Создать форму
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
     )

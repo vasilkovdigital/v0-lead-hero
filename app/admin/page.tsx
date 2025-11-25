@@ -10,5 +10,13 @@ export default async function AdminPage() {
     redirect("/auth/login")
   }
 
-  return <AdminDashboard />
+  return (
+    <div className="min-h-screen px-[10%] md:px-0">
+      <div className="w-full max-w-7xl mx-auto grid grid-cols-12 gap-4 py-8">
+        <div className="col-span-12">
+          <AdminDashboard />
+        </div>
+      </div>
+    </div>
+  )
 }

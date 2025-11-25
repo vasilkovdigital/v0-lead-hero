@@ -38,51 +38,53 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Вход</CardTitle>
-            <CardDescription>Введите данные для доступа к панели управления</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin}>
-              <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
+    <div className="flex min-h-screen w-full items-center justify-center px-[10%] md:px-0">
+      <div className="w-full max-w-7xl mx-auto grid grid-cols-12 gap-4">
+        <div className="col-span-12 md:col-start-5 md:col-span-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">Вход</CardTitle>
+              <CardDescription>Введите данные для доступа к панели управления</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleLogin}>
+                <div className="flex flex-col gap-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="password">Пароль</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </div>
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? "Вход..." : "Войти"}
+                  </Button>
+                  <p className="text-center text-sm text-muted-foreground">
+                    Нет аккаунта?{" "}
+                    <Link href="/auth/register" className="text-primary hover:underline">
+                      Зарегистрироваться
+                    </Link>
+                  </p>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="password">Пароль</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Вход..." : "Войти"}
-                </Button>
-                <p className="text-center text-sm text-muted-foreground">
-                  Нет аккаунта?{" "}
-                  <Link href="/auth/register" className="text-primary hover:underline">
-                    Зарегистрироваться
-                  </Link>
-                </p>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

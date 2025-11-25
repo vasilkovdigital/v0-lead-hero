@@ -50,17 +50,39 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
 
     try {
       if (result.type === "image" && result.imageUrl) {
-        // Download image
-        const response = await fetch(result.imageUrl)
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement("a")
-        link.href = url
-        link.download = "result.png"
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
+        // Используем canvas для загрузки изображения (обход CORS)
+        const img = new Image()
+        img.crossOrigin = "anonymous"
+
+        img.onload = () => {
+          const canvas = document.createElement("canvas")
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+          const ctx = canvas.getContext("2d")
+          ctx?.drawImage(img, 0, 0)
+
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob)
+              const link = document.createElement("a")
+              link.href = url
+              link.download = "result.png"
+              document.body.appendChild(link)
+              link.click()
+              document.body.removeChild(link)
+              URL.revokeObjectURL(url)
+            }
+            setDownloading(false)
+          }, "image/png")
+        }
+
+        img.onerror = () => {
+          // Fallback: открыть изображение в новой вкладке
+          window.open(result.imageUrl, "_blank")
+          setDownloading(false)
+        }
+
+        img.src = result.imageUrl
       } else {
         // Download text as PDF
         const pdf = new jsPDF()
@@ -76,10 +98,14 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
         pdf.text(lines, margin, margin + 15)
 
         pdf.save("recommendations.pdf")
+        setDownloading(false)
       }
     } catch (error) {
       console.error("Download error:", error)
-    } finally {
+      // Fallback для изображения
+      if (result.type === "image" && result.imageUrl) {
+        window.open(result.imageUrl, "_blank")
+      }
       setDownloading(false)
     }
   }

@@ -20,6 +20,7 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
   const [isValid, setIsValid] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [contentLoading, setContentLoading] = useState(true)
   const [content, setContent] = useState({
     title: "Анализ сайта с помощью ИИ",
     subtitle: "Получите детальный анализ вашего сайта за 30 секунд",
@@ -30,6 +31,7 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
 
   useEffect(() => {
     const fetchContent = async () => {
+      setContentLoading(true)
       const supabase = createClient()
       const { data } = await supabase.from("form_content").select("key, value").eq("form_id", effectiveFormId)
 
@@ -40,13 +42,14 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
         })
 
         setContent({
-          title: contentMap.page_title || content.title,
-          subtitle: contentMap.page_subtitle || content.subtitle,
-          buttonText: contentMap.submit_button || content.buttonText,
-          placeholder: contentMap.url_placeholder || content.placeholder,
-          disclaimer: contentMap.disclaimer || content.disclaimer,
+          title: contentMap.page_title || "Анализ сайта с помощью ИИ",
+          subtitle: contentMap.page_subtitle || "Получите детальный анализ вашего сайта за 30 секунд",
+          buttonText: contentMap.submit_button || "Получить анализ",
+          placeholder: contentMap.url_placeholder || "https://example.com",
+          disclaimer: contentMap.disclaimer || "Бесплатно • Занимает 30 секунд",
         })
       }
+      setContentLoading(false)
     }
 
     fetchContent()
@@ -78,7 +81,6 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
 
     const supabase = createClient()
 
-    // Check form limit only
     const { data: form } = await supabase
       .from("forms")
       .select("lead_count, lead_limit, is_active")
@@ -104,6 +106,21 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
     }
 
     onSubmit(formattedUrl)
+  }
+
+  if (contentLoading) {
+    return (
+      <div className="flex flex-col items-center text-center space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-4">
+          <div className="h-12 w-64 bg-muted animate-pulse rounded" />
+          <div className="h-6 w-48 bg-muted animate-pulse rounded mx-auto" />
+        </div>
+        <div className="w-full max-w-md space-y-4">
+          <div className="h-14 bg-muted animate-pulse rounded" />
+          <div className="h-14 bg-muted animate-pulse rounded" />
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -42,73 +42,79 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center p-6">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle className="text-2xl">Проверьте почту</CardTitle>
-            <CardDescription>
-              Мы отправили ссылку для подтверждения на {email}. После подтверждения вы сможете войти в систему.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/auth/login">
-              <Button variant="outline" className="w-full bg-transparent">
-                Вернуться к входу
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+      <div className="flex min-h-screen w-full items-center justify-center px-[10%] md:px-0">
+        <div className="w-full max-w-7xl mx-auto grid grid-cols-12 gap-4">
+          <div className="col-span-12 md:col-start-5 md:col-span-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-2xl">Проверьте почту</CardTitle>
+                <CardDescription>
+                  Мы отправили ссылку для подтверждения на {email}. После подтверждения вы сможете войти в систему.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/auth/login">
+                  <Button variant="outline" className="w-full bg-transparent">
+                    Вернуться к входу
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Регистрация</CardTitle>
-            <CardDescription>Создайте аккаунт для управления формами</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleRegister}>
-              <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
+    <div className="flex min-h-screen w-full items-center justify-center px-[10%] md:px-0">
+      <div className="w-full max-w-7xl mx-auto grid grid-cols-12 gap-4">
+        <div className="col-span-12 md:col-start-5 md:col-span-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">Регистрация</CardTitle>
+              <CardDescription>Создайте аккаунт для управления формами</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleRegister}>
+                <div className="flex flex-col gap-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="password">Пароль</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </div>
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? "Регистрация..." : "Зарегистрироваться"}
+                  </Button>
+                  <p className="text-center text-sm text-muted-foreground">
+                    Уже есть аккаунт?{" "}
+                    <Link href="/auth/login" className="text-primary hover:underline">
+                      Войти
+                    </Link>
+                  </p>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="password">Пароль</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Регистрация..." : "Зарегистрироваться"}
-                </Button>
-                <p className="text-center text-sm text-muted-foreground">
-                  Уже есть аккаунт?{" "}
-                  <Link href="/auth/login" className="text-primary hover:underline">
-                    Войти
-                  </Link>
-                </p>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
