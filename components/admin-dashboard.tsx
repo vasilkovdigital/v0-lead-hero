@@ -21,7 +21,6 @@ export function AdminDashboard() {
 
       if (user) {
         const { data } = await supabase.from("users").select("role").eq("id", user.id).single()
-
         setUserRole(data?.role || "admin")
       }
       setLoading(false)
@@ -43,27 +42,29 @@ export function AdminDashboard() {
         <div>
           <h1 className="text-3xl font-bold">{isSuperAdmin ? "Super Admin Dashboard" : "Admin Dashboard"}</h1>
           <p className="text-muted-foreground">
-            {isSuperAdmin ? "Manage all forms and leads" : "Manage your form and leads"}
+            {isSuperAdmin ? "Manage the main form and view all leads" : "Manage your forms and leads"}
           </p>
         </div>
 
-        <Tabs defaultValue="myform" className="space-y-6">
+        <Tabs defaultValue={isSuperAdmin ? "content" : "forms"} className="space-y-6">
           <TabsList>
-            <TabsTrigger value="myform">{isSuperAdmin ? "My Forms" : "My Form"}</TabsTrigger>
+            {!isSuperAdmin && <TabsTrigger value="forms">My Forms</TabsTrigger>}
             <TabsTrigger value="leads">Leads</TabsTrigger>
-            <TabsTrigger value="content">Content</TabsTrigger>
+            <TabsTrigger value="content">{isSuperAdmin ? "Main Form Editor" : "Form Content"}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="myform" className="space-y-4">
-            <FormsManager />
-          </TabsContent>
+          {!isSuperAdmin && (
+            <TabsContent value="forms" className="space-y-4">
+              <FormsManager />
+            </TabsContent>
+          )}
 
           <TabsContent value="leads" className="space-y-4">
             <LeadsTable />
           </TabsContent>
 
           <TabsContent value="content" className="space-y-4">
-            <ContentEditor />
+            <ContentEditor formId={isSuperAdmin ? "f5fad560-eea2-443c-98e9-1a66447dae86" : undefined} />
           </TabsContent>
         </Tabs>
       </div>
