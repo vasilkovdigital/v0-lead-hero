@@ -6,12 +6,11 @@ import { Spinner } from "@/components/ui/spinner"
 
 interface LoadingStepProps {
   url: string
-  leadId: string
   formId?: string
   onComplete: (result: { type: string; text: string; imageUrl?: string }) => void
 }
 
-export function LoadingStep({ url, leadId, formId, onComplete }: LoadingStepProps) {
+export function LoadingStep({ url, formId, onComplete }: LoadingStepProps) {
   const [messageIndex, setMessageIndex] = useState(0)
   const [messages, setMessages] = useState([
     "Analyzing your link...",
@@ -41,23 +40,6 @@ export function LoadingStep({ url, leadId, formId, onComplete }: LoadingStepProp
             setMessages(loadedMessages)
           }
         }
-      } else {
-        // Fallback to old content table
-        const { data } = await supabase
-          .from("content")
-          .select("key, value")
-          .in("key", ["loading_message_1", "loading_message_2", "loading_message_3"])
-
-        if (data && data.length > 0) {
-          const loadedMessages = data
-            .sort((a, b) => a.key.localeCompare(b.key))
-            .map((item) => item.value)
-            .filter((msg) => msg && msg.length > 0)
-
-          if (loadedMessages.length > 0) {
-            setMessages(loadedMessages)
-          }
-        }
       }
     }
 
@@ -70,8 +52,6 @@ export function LoadingStep({ url, leadId, formId, onComplete }: LoadingStepProp
     }, 1500)
 
     const generateResult = async () => {
-      console.log("[v0] Starting result generation...")
-
       try {
         const response = await fetch("/api/generate", {
           method: "POST",
@@ -80,13 +60,11 @@ export function LoadingStep({ url, leadId, formId, onComplete }: LoadingStepProp
           },
           body: JSON.stringify({
             url,
-            leadId,
             formId,
           }),
         })
 
         const data = await response.json()
-        console.log("[v0] Generation response:", data)
 
         if (data.success && data.result) {
           setTimeout(() => {
@@ -103,7 +81,7 @@ export function LoadingStep({ url, leadId, formId, onComplete }: LoadingStepProp
     generateResult()
 
     return () => clearInterval(messageInterval)
-  }, [url, leadId, formId, onComplete, messages])
+  }, [url, formId, onComplete, messages])
 
   return (
     <div className="flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500">

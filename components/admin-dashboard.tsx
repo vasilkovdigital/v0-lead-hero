@@ -6,7 +6,10 @@ import { LeadsTable } from "./leads-table"
 import { ContentEditor } from "./content-editor"
 import { AdminHeader } from "./admin-header"
 import { FormsManager } from "./forms-manager"
+import { UsersTable } from "./users-table"
 import { createClient } from "@/lib/supabase/client"
+
+const MAIN_FORM_ID = "f5fad560-eea2-443c-98e9-1a66447dae86"
 
 export function AdminDashboard() {
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -21,7 +24,7 @@ export function AdminDashboard() {
 
       if (user) {
         const { data } = await supabase.from("users").select("role").eq("id", user.id).single()
-        setUserRole(data?.role || "admin")
+        setUserRole(data?.role || "user")
       }
       setLoading(false)
     }
@@ -30,7 +33,7 @@ export function AdminDashboard() {
   }, [])
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>
+    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>
   }
 
   const isSuperAdmin = userRole === "superadmin"
@@ -40,32 +43,56 @@ export function AdminDashboard() {
       <AdminHeader />
       <div className="container mx-auto p-6 space-y-8">
         <div>
-          <h1 className="text-3xl font-bold">{isSuperAdmin ? "Super Admin Dashboard" : "Admin Dashboard"}</h1>
+          <h1 className="text-3xl font-bold">{isSuperAdmin ? "Панель суперадмина" : "Панель управления"}</h1>
           <p className="text-muted-foreground">
-            {isSuperAdmin ? "Manage the main form and view all leads" : "Manage your forms and leads"}
+            {isSuperAdmin
+              ? "Управление главной формой и просмотр всех пользователей"
+              : "Управление вашей формой и лидами"}
           </p>
         </div>
 
-        <Tabs defaultValue={isSuperAdmin ? "content" : "forms"} className="space-y-6">
+        <Tabs defaultValue={isSuperAdmin ? "content" : "form"} className="space-y-6">
           <TabsList>
-            {!isSuperAdmin && <TabsTrigger value="forms">My Forms</TabsTrigger>}
-            <TabsTrigger value="leads">Leads</TabsTrigger>
-            <TabsTrigger value="content">{isSuperAdmin ? "Main Form Editor" : "Form Content"}</TabsTrigger>
+            {isSuperAdmin ? (
+              <>
+                <TabsTrigger value="content">Главная форма</TabsTrigger>
+                <TabsTrigger value="leads">Лиды</TabsTrigger>
+                <TabsTrigger value="users">Пользователи</TabsTrigger>
+              </>
+            ) : (
+              <>
+                <TabsTrigger value="form">Моя форма</TabsTrigger>
+                <TabsTrigger value="leads">Лиды</TabsTrigger>
+                <TabsTrigger value="content">Контент</TabsTrigger>
+              </>
+            )}
           </TabsList>
 
-          {!isSuperAdmin && (
-            <TabsContent value="forms" className="space-y-4">
-              <FormsManager />
-            </TabsContent>
+          {isSuperAdmin ? (
+            <>
+              <TabsContent value="content" className="space-y-4">
+                <ContentEditor formId={MAIN_FORM_ID} />
+              </TabsContent>
+              <TabsContent value="leads" className="space-y-4">
+                <LeadsTable formId={MAIN_FORM_ID} />
+              </TabsContent>
+              <TabsContent value="users" className="space-y-4">
+                <UsersTable />
+              </TabsContent>
+            </>
+          ) : (
+            <>
+              <TabsContent value="form" className="space-y-4">
+                <FormsManager />
+              </TabsContent>
+              <TabsContent value="leads" className="space-y-4">
+                <LeadsTable />
+              </TabsContent>
+              <TabsContent value="content" className="space-y-4">
+                <ContentEditor />
+              </TabsContent>
+            </>
           )}
-
-          <TabsContent value="leads" className="space-y-4">
-            <LeadsTable />
-          </TabsContent>
-
-          <TabsContent value="content" className="space-y-4">
-            <ContentEditor formId={isSuperAdmin ? "f5fad560-eea2-443c-98e9-1a66447dae86" : undefined} />
-          </TabsContent>
         </Tabs>
       </div>
     </div>

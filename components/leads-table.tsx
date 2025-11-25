@@ -19,16 +19,19 @@ interface Lead {
   form_id: string | null
 }
 
-export function LeadsTable() {
+interface LeadsTableProps {
+  formId?: string
+}
+
+export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
   const [leads, setLeads] = useState<Lead[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [userRole, setUserRole] = useState<string>("admin")
 
   useEffect(() => {
-    fetchUserAndLeads()
-  }, [])
+    fetchLeads()
+  }, [propFormId])
 
-  const fetchUserAndLeads = async () => {
+  const fetchLeads = async () => {
     const supabase = createClient()
     const {
       data: { user },
@@ -36,15 +39,15 @@ export function LeadsTable() {
 
     if (!user) return
 
-    const { data: profile } = await supabase.from("users").select("role").eq("id", user.id).single()
-    const role = profile?.role || "admin"
-    setUserRole(role)
-
     let query = supabase.from("leads").select("*").order("created_at", { ascending: false })
 
-    if (role === "admin") {
-      // Get user's form
+    if (propFormId) {
+      // Superadmin viewing specific form
+      query = query.eq("form_id", propFormId)
+    } else {
+      // Regular user - get their form's leads
       const { data: userForm } = await supabase.from("forms").select("id").eq("owner_id", user.id).single()
+
       if (userForm) {
         query = query.eq("form_id", userForm.id)
       }
@@ -59,7 +62,7 @@ export function LeadsTable() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this lead?")) return
+    if (!confirm("Удалить этот лид?")) return
 
     const supabase = createClient()
     const { error } = await supabase.from("leads").delete().eq("id", id)
@@ -71,12 +74,12 @@ export function LeadsTable() {
 
   const handleExport = () => {
     const csv = [
-      ["URL", "Email", "Status", "Created At", "Result"],
+      ["URL", "Email", "Статус", "Дата", "Результат"],
       ...leads.map((lead) => [
         lead.url,
         lead.email || "",
         lead.status,
-        new Date(lead.created_at).toLocaleString(),
+        new Date(lead.created_at).toLocaleString("ru-RU"),
         lead.result_text || lead.result_image_url || "",
       ]),
     ]
@@ -92,21 +95,19 @@ export function LeadsTable() {
   }
 
   if (isLoading) {
-    return <div className="text-center py-8">Loading leads...</div>
+    return <div className="text-center py-8">Загрузка лидов...</div>
   }
 
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Leads</h2>
-          <p className="text-muted-foreground">
-            {leads.length} total {userRole === "superadmin" ? "leads across all forms" : "leads"}
-          </p>
+          <h2 className="text-2xl font-bold">Лиды</h2>
+          <p className="text-muted-foreground">{leads.length} всего</p>
         </div>
         <Button onClick={handleExport} variant="outline" disabled={leads.length === 0}>
           <Download className="mr-2 h-4 w-4" />
-          Export CSV
+          Экспорт CSV
         </Button>
       </div>
 
@@ -116,17 +117,17 @@ export function LeadsTable() {
             <TableRow>
               <TableHead>URL</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Result</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Статус</TableHead>
+              <TableHead>Результат</TableHead>
+              <TableHead>Дата</TableHead>
+              <TableHead className="text-right">Действия</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {leads.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No leads yet
+                  Лидов пока нет
                 </TableCell>
               </TableRow>
             ) : (
@@ -135,7 +136,9 @@ export function LeadsTable() {
                   <TableCell className="font-medium max-w-xs truncate">{lead.url}</TableCell>
                   <TableCell>{lead.email || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={lead.status === "completed" ? "default" : "outline"}>{lead.status}</Badge>
+                    <Badge variant={lead.status === "completed" ? "default" : "outline"}>
+                      {lead.status === "completed" ? "Завершен" : "В обработке"}
+                    </Badge>
                   </TableCell>
                   <TableCell className="max-w-xs truncate">
                     {lead.result_image_url ? (
@@ -145,7 +148,7 @@ export function LeadsTable() {
                         rel="noopener noreferrer"
                         className="text-blue-500 hover:underline"
                       >
-                        View Image
+                        Картинка
                       </a>
                     ) : lead.result_text ? (
                       <span className="text-xs">{lead.result_text.substring(0, 50)}...</span>
@@ -153,7 +156,7 @@ export function LeadsTable() {
                       "-"
                     )}
                   </TableCell>
-                  <TableCell>{new Date(lead.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(lead.created_at).toLocaleDateString("ru-RU")}</TableCell>
                   <TableCell className="text-right">
                     <Button onClick={() => handleDelete(lead.id)} variant="ghost" size="sm">
                       <Trash2 className="h-4 w-4" />

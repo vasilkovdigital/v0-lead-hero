@@ -1,32 +1,23 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClient } from "@/lib/supabase/client"
+import { createLead } from "@/app/actions/leads"
 
 interface EmailCaptureStepProps {
-  leadId: string
+  url: string
+  formId: string
   result: { type: string; text: string; imageUrl: string }
   onSuccess: () => void
 }
 
-export function EmailCaptureStep({ leadId, result, onSuccess }: EmailCaptureStepProps) {
+export function EmailCaptureStep({ url, formId, result, onSuccess }: EmailCaptureStepProps) {
   const [email, setEmail] = useState("")
   const [isValid, setIsValid] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [content, setContent] = useState({
-    title: "Get Your Results",
-    description: "Enter your email to receive your personalized recommendations",
-  })
-
-  useEffect(() => {
-    const fetchContent = async () => {}
-
-    fetchContent()
-  }, [])
+  const [error, setError] = useState<string | null>(null)
 
   const validateEmail = (value: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
@@ -35,6 +26,7 @@ export function EmailCaptureStep({ leadId, result, onSuccess }: EmailCaptureStep
   const handleChange = (value: string) => {
     setEmail(value)
     setIsValid(validateEmail(value))
+    setError(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,53 +34,47 @@ export function EmailCaptureStep({ leadId, result, onSuccess }: EmailCaptureStep
     if (!isValid || isLoading) return
 
     setIsLoading(true)
+    setError(null)
 
-    const supabase = createClient()
+    const response = await createLead({
+      formId,
+      email,
+      url,
+      resultText: result.text,
+      resultImageUrl: result.imageUrl || null,
+    })
 
-    const { error: updateError } = await supabase.from("leads").update({ email, status: "completed" }).eq("id", leadId)
-
-    if (!updateError) {
-      const { data: leadData } = await supabase.from("leads").select("url").eq("id", leadId).single()
-
-      try {
-        const response = await fetch("/api/send-email", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            resultText: result.text,
-            resultImageUrl: result.imageUrl || null,
-            resultType: result.type,
-            url: leadData?.url || "",
-          }),
-        })
-
-        const emailResult = await response.json()
-        console.log("[v0] Email send result:", emailResult)
-
-        if (!response.ok) {
-          console.error("[v0] Email send failed:", emailResult)
-        }
-      } catch (error) {
-        console.error("[v0] Error sending email:", error)
-      }
-
-      setTimeout(() => {
-        onSuccess()
-      }, 500)
-    } else {
-      console.error("[v0] Error updating lead:", updateError)
+    if (response.error) {
+      setError(response.error)
       setIsLoading(false)
+      return
     }
+
+    // Send email
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          resultText: result.text,
+          resultImageUrl: result.imageUrl || null,
+          resultType: result.type,
+          url,
+        }),
+      })
+    } catch (error) {
+      console.error("[v0] Error sending email:", error)
+    }
+
+    onSuccess()
   }
 
   return (
     <div className="flex flex-col items-center text-center space-y-8 animate-in fade-in duration-500">
       <div className="space-y-4">
-        <h2 className="text-3xl font-bold">{content.title}</h2>
-        <p className="text-lg text-muted-foreground max-w-md">{content.description}</p>
+        <h2 className="text-3xl font-bold">Получите результаты</h2>
+        <p className="text-lg text-muted-foreground max-w-md">Введите email чтобы получить полный анализ</p>
       </div>
 
       <form onSubmit={handleSubmit} className="w-full max-w-md space-y-4">
@@ -100,12 +86,13 @@ export function EmailCaptureStep({ leadId, result, onSuccess }: EmailCaptureStep
           className="h-14 text-lg px-6 bg-card border-border"
           disabled={isLoading}
         />
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" disabled={!isValid || isLoading} className="w-full h-14 text-lg font-semibold">
-          {isLoading ? "Sending..." : "Send Me Recommendations"}
+          {isLoading ? "Отправка..." : "Отправить анализ"}
         </Button>
       </form>
 
-      <p className="text-sm text-muted-foreground">We respect your privacy. No spam, ever.</p>
+      <p className="text-sm text-muted-foreground">Мы уважаем вашу приватность. Никакого спама.</p>
     </div>
   )
 }

@@ -1,51 +1,56 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 
+const MAIN_FORM_ID = "f5fad560-eea2-443c-98e9-1a66447dae86"
+
 interface URLSubmissionStepProps {
-  onSubmit: (url: string, leadId: string) => void
-  formId?: string // Added formId prop
+  onSubmit: (url: string) => void
+  formId?: string
 }
 
 export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) {
+  const effectiveFormId = formId || MAIN_FORM_ID
+
   const [url, setUrl] = useState("")
   const [isValid, setIsValid] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [content, setContent] = useState({
-    title: "Transform Your Space",
-    subtitle: "Share your Pinterest inspiration and get personalized interior design recommendations",
+    title: "Анализ сайта с помощью ИИ",
+    subtitle: "Получите детальный анализ вашего сайта за 30 секунд",
+    buttonText: "Получить анализ",
+    placeholder: "https://example.com",
+    disclaimer: "Бесплатно • Занимает 30 секунд",
   })
 
   useEffect(() => {
     const fetchContent = async () => {
       const supabase = createClient()
+      const { data } = await supabase.from("form_content").select("key, value").eq("form_id", effectiveFormId)
 
-      if (formId) {
-        const { data } = await supabase
-          .from("form_content")
-          .select("key, value")
-          .eq("form_id", formId)
-          .in("key", ["page_title", "page_subtitle"])
+      if (data && data.length > 0) {
+        const contentMap: Record<string, string> = {}
+        data.forEach((item) => {
+          contentMap[item.key] = item.value
+        })
 
-        if (data && data.length > 0) {
-          const titleData = data.find((item) => item.key === "page_title")
-          const subtitleData = data.find((item) => item.key === "page_subtitle")
-
-          setContent({
-            title: titleData?.value || content.title,
-            subtitle: subtitleData?.value || content.subtitle,
-          })
-        }
+        setContent({
+          title: contentMap.page_title || content.title,
+          subtitle: contentMap.page_subtitle || content.subtitle,
+          buttonText: contentMap.submit_button || content.buttonText,
+          placeholder: contentMap.url_placeholder || content.placeholder,
+          disclaimer: contentMap.disclaimer || content.disclaimer,
+        })
       }
     }
 
     fetchContent()
-  }, [formId])
+  }, [effectiveFormId])
 
   const validateUrl = (value: string) => {
     if (!value) return false
@@ -60,6 +65,7 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
   const handleChange = (value: string) => {
     setUrl(value)
     setIsValid(validateUrl(value))
+    setError(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,27 +73,37 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
     if (!isValid || isLoading) return
 
     setIsLoading(true)
+    setError(null)
     const formattedUrl = url.startsWith("http") ? url : `https://${url}`
 
     const supabase = createClient()
 
-    const { data, error } = await supabase
-      .from("leads")
-      .insert({
-        url: formattedUrl,
-        email: "",
-        status: "pending",
-        form_id: formId || null,
-      })
-      .select()
+    // Check form limit only
+    const { data: form } = await supabase
+      .from("forms")
+      .select("lead_count, lead_limit, is_active")
+      .eq("id", effectiveFormId)
       .single()
 
-    if (!error && data) {
-      onSubmit(formattedUrl, data.id)
-    } else {
-      console.error("[v0] Error creating lead:", error)
+    if (!form) {
+      setError("Форма не найдена")
       setIsLoading(false)
+      return
     }
+
+    if (!form.is_active) {
+      setError("Форма временно недоступна")
+      setIsLoading(false)
+      return
+    }
+
+    if (form.lead_count >= form.lead_limit) {
+      setError("Лимит заявок исчерпан. Для увеличения лимита напишите на hello@vasilkov.digital")
+      setIsLoading(false)
+      return
+    }
+
+    onSubmit(formattedUrl)
   }
 
   return (
@@ -101,19 +117,20 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
         <div className="relative">
           <Input
             type="text"
-            placeholder="pinterest.com/pin/..."
+            placeholder={content.placeholder}
             value={url}
             onChange={(e) => handleChange(e.target.value)}
             className="h-14 text-lg px-6 bg-card border-border"
             disabled={isLoading}
           />
         </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" disabled={!isValid || isLoading} className="w-full h-14 text-lg font-semibold">
-          {isLoading ? "Processing..." : "Get Recommendations"}
+          {isLoading ? "Обработка..." : content.buttonText}
         </Button>
       </form>
 
-      <p className="text-sm text-muted-foreground">No credit card required • Takes less than 30 seconds</p>
+      <p className="text-sm text-muted-foreground">{content.disclaimer}</p>
     </div>
   )
 }

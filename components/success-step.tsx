@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Share2, Download } from "lucide-react"
+import { jsPDF } from "jspdf"
 
 interface SuccessStepProps {
   result: { type: string; text: string; imageUrl?: string }
@@ -10,59 +11,77 @@ interface SuccessStepProps {
 }
 
 export function SuccessStep({ result, onRestart }: SuccessStepProps) {
-  const [content, setContent] = useState({
-    title: "Your Recommendations",
-    description: "We've sent a copy to your email",
-    shareText: "I just got my personalized recommendations!",
-  })
-
-  useEffect(() => {
-    const fetchContent = async () => {}
-
-    fetchContent()
-  }, [])
+  const [copied, setCopied] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const handleShare = async () => {
-    const shareText = content.shareText
-    const shareUrl = window.location.origin
+    const shareText = `Получил рекомендации! ${window.location.origin}`
 
-    console.log("[v0] Attempting to share:", shareText, shareUrl)
+    try {
+      await navigator.clipboard.writeText(shareText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
 
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Lead Hero Recommendations",
-          text: shareText,
-          url: shareUrl,
-        })
-        console.log("[v0] Share successful")
-      } catch (err: any) {
-        if (err.name !== "AbortError") {
-          console.error("[v0] Share error:", err)
-          await navigator.clipboard.writeText(`${shareText} ${shareUrl}`)
-          alert("Link copied to clipboard!")
+      if (navigator.share && window.isSecureContext) {
+        try {
+          await navigator.share({
+            title: "Lead Hero",
+            text: "Получил персональные рекомендации!",
+            url: window.location.origin,
+          })
+        } catch {
+          // User cancelled
         }
       }
-    } else {
-      try {
-        await navigator.clipboard.writeText(`${shareText} ${shareUrl}`)
-        alert("Link copied to clipboard!")
-        console.log("[v0] Link copied to clipboard")
-      } catch (err) {
-        console.error("[v0] Clipboard error:", err)
-        alert("Could not copy link. Please copy manually: " + shareUrl)
-      }
+    } catch {
+      const textArea = document.createElement("textarea")
+      textArea.value = shareText
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textArea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
-  const handleDownload = () => {
-    const element = document.createElement("a")
-    const file = new Blob([result.text], { type: "text/plain" })
-    element.href = URL.createObjectURL(file)
-    element.download = "recommendations.txt"
-    document.body.appendChild(element)
-    element.click()
-    document.body.removeChild(element)
+  const handleDownload = async () => {
+    setDownloading(true)
+
+    try {
+      if (result.type === "image" && result.imageUrl) {
+        // Download image
+        const response = await fetch(result.imageUrl)
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = "result.png"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      } else {
+        // Download text as PDF
+        const pdf = new jsPDF()
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const margin = 20
+        const maxWidth = pageWidth - margin * 2
+
+        pdf.setFontSize(16)
+        pdf.text("Ваши рекомендации", margin, margin)
+
+        pdf.setFontSize(11)
+        const lines = pdf.splitTextToSize(result.text, maxWidth)
+        pdf.text(lines, margin, margin + 15)
+
+        pdf.save("recommendations.pdf")
+      }
+    } catch (error) {
+      console.error("Download error:", error)
+    } finally {
+      setDownloading(false)
+    }
   }
 
   return (
@@ -74,18 +93,14 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-3xl font-bold">{content.title}</h2>
-        <p className="text-lg text-muted-foreground max-w-md">{content.description}</p>
+        <h2 className="text-3xl font-bold">Готово!</h2>
+        <p className="text-lg text-muted-foreground max-w-md">Результаты также отправлены на вашу почту</p>
       </div>
 
       <div className="w-full bg-card rounded-lg border border-border p-6">
         <div className="prose prose-invert max-w-none text-left">
           {result.type === "image" && result.imageUrl ? (
-            <img
-              src={result.imageUrl || "/placeholder.svg"}
-              alt="Generated recommendation"
-              className="w-full rounded"
-            />
+            <img src={result.imageUrl || "/placeholder.svg"} alt="Generated result" className="w-full rounded" />
           ) : (
             <div className="whitespace-pre-wrap text-sm leading-relaxed">{result.text}</div>
           )}
@@ -95,14 +110,19 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
       <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
         <Button onClick={handleShare} variant="outline" className="flex-1 h-12 bg-transparent">
           <Share2 className="mr-2 h-4 w-4" />
-          Share
+          {copied ? "Скопировано!" : "Поделиться"}
         </Button>
-        <Button onClick={handleDownload} variant="outline" className="flex-1 h-12 bg-transparent">
+        <Button
+          onClick={handleDownload}
+          variant="outline"
+          className="flex-1 h-12 bg-transparent"
+          disabled={downloading}
+        >
           <Download className="mr-2 h-4 w-4" />
-          Download
+          {downloading ? "Загрузка..." : "Скачать"}
         </Button>
         <Button onClick={onRestart} className="flex-1 h-12">
-          Check Another URL
+          Проверить другой URL
         </Button>
       </div>
     </div>
