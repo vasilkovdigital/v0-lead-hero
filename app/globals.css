@@ -23,7 +23,7 @@
   --border: #262626;
   --input: #262626;
   --ring: #59191f;
-  --radius: 4px;
+  --radius: 0.625rem;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
