@@ -1,12 +1,23 @@
+/**
+ * LeadsTable - Компонент для отображения и управления лидами
+ * Поддерживает просмотр лидов по всем формам пользователя с фильтрацией
+ */
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, Download } from "lucide-react"
+import { Trash2, Download, Filter } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface Lead {
   id: string
@@ -19,19 +30,22 @@ interface Lead {
   form_id: string | null
 }
 
+interface Form {
+  id: string
+  name: string
+}
+
 interface LeadsTableProps {
   formId?: string
 }
 
 export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
   const [leads, setLeads] = useState<Lead[]>([])
+  const [forms, setForms] = useState<Form[]>([])
+  const [selectedFormId, setSelectedFormId] = useState<string | "all">("all")
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    fetchLeads()
-  }, [propFormId])
-
-  const fetchLeads = async () => {
+  const fetchFormsAndLeads = useCallback(async () => {
     const supabase = createClient()
     const {
       data: { user },
@@ -39,27 +53,50 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
 
     if (!user) return
 
-    let query = supabase.from("leads").select("*").order("created_at", { ascending: false })
-
+    // Если передан конкретный formId (суперадмин), показываем только его лиды
     if (propFormId) {
-      // Superadmin viewing specific form
-      query = query.eq("form_id", propFormId)
-    } else {
-      // Regular user - get their form's leads
-      const { data: userForm } = await supabase.from("forms").select("id").eq("owner_id", user.id).single()
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("form_id", propFormId)
+        .order("created_at", { ascending: false })
 
-      if (userForm) {
-        query = query.eq("form_id", userForm.id)
+      if (!error && data) {
+        setLeads(data)
+      }
+      setIsLoading(false)
+      return
+    }
+
+    // Загружаем все формы пользователя
+    const { data: userForms } = await supabase
+      .from("forms")
+      .select("id, name")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: false })
+
+    if (userForms && userForms.length > 0) {
+      setForms(userForms)
+      
+      // Загружаем лиды по всем формам пользователя
+      const formIds = userForms.map(f => f.id)
+      const { data: leadsData, error } = await supabase
+        .from("leads")
+        .select("*")
+        .in("form_id", formIds)
+        .order("created_at", { ascending: false })
+
+      if (!error && leadsData) {
+        setLeads(leadsData)
       }
     }
-
-    const { data, error } = await query
-
-    if (!error && data) {
-      setLeads(data)
-    }
+    
     setIsLoading(false)
-  }
+  }, [propFormId])
+
+  useEffect(() => {
+    fetchFormsAndLeads()
+  }, [fetchFormsAndLeads])
 
   const handleDelete = async (id: string) => {
     if (!confirm("Удалить этот лид?")) return
@@ -73,14 +110,16 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
   }
 
   const handleExport = () => {
+    const dataToExport = filteredLeads
     const csv = [
-      ["URL", "Email", "Статус", "Дата", "Результат"],
-      ...leads.map((lead) => [
+      ["URL", "Email", "Статус", "Дата", "Результат", "Форма"],
+      ...dataToExport.map((lead) => [
         lead.url,
         lead.email || "",
         lead.status,
         new Date(lead.created_at).toLocaleString("ru-RU"),
         lead.result_text || lead.result_image_url || "",
+        forms.find(f => f.id === lead.form_id)?.name || "",
       ]),
     ]
       .map((row) => row.map((cell) => `"${cell}"`).join(","))
@@ -94,6 +133,17 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
     a.click()
   }
 
+  // Фильтрация лидов по выбранной форме
+  const filteredLeads = selectedFormId === "all" 
+    ? leads 
+    : leads.filter(lead => lead.form_id === selectedFormId)
+
+  // Получаем название формы по ID
+  const getFormName = (formId: string | null) => {
+    if (!formId) return "-"
+    return forms.find(f => f.id === formId)?.name || formId.slice(0, 8)
+  }
+
   if (isLoading) {
     return <div className="text-center py-8">Загрузка лидов...</div>
   }
@@ -103,12 +153,38 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold">Лиды</h2>
-          <p className="text-muted-foreground">{leads.length} всего</p>
+          <p className="text-muted-foreground">
+            {filteredLeads.length} {selectedFormId === "all" ? "всего" : "в выбранной форме"}
+          </p>
         </div>
-        <Button onClick={handleExport} variant="outline" disabled={leads.length === 0}>
-          <Download className="mr-2 h-4 w-4" />
-          Экспорт CSV
-        </Button>
+        <div className="flex gap-2">
+          {/* Фильтр по формам (только если есть несколько форм) */}
+          {forms.length > 1 && !propFormId && (
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedFormId} onValueChange={setSelectedFormId}>
+                <SelectTrigger className="h-9 w-[200px]">
+                  <SelectValue placeholder="Выберите форму" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все формы ({leads.length})</SelectItem>
+                  {forms.map((form) => {
+                    const count = leads.filter(l => l.form_id === form.id).length
+                    return (
+                      <SelectItem key={form.id} value={form.id}>
+                        {form.name} ({count})
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <Button onClick={handleExport} variant="outline" disabled={filteredLeads.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Экспорт CSV
+          </Button>
+        </div>
       </div>
 
       <div className="border rounded-lg">
@@ -119,19 +195,20 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
               <TableHead>Email</TableHead>
               <TableHead>Статус</TableHead>
               <TableHead>Результат</TableHead>
+              {forms.length > 1 && !propFormId && <TableHead>Форма</TableHead>}
               <TableHead>Дата</TableHead>
               <TableHead className="text-right">Действия</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leads.length === 0 ? (
+            {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={forms.length > 1 ? 7 : 6} className="text-center py-8 text-muted-foreground">
                   Лидов пока нет
                 </TableCell>
               </TableRow>
             ) : (
-              leads.map((lead) => (
+              filteredLeads.map((lead) => (
                 <TableRow key={lead.id}>
                   <TableCell className="font-medium max-w-xs truncate">{lead.url}</TableCell>
                   <TableCell>{lead.email || "-"}</TableCell>
@@ -156,6 +233,11 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
                       "-"
                     )}
                   </TableCell>
+                  {forms.length > 1 && !propFormId && (
+                    <TableCell className="text-sm text-muted-foreground">
+                      {getFormName(lead.form_id)}
+                    </TableCell>
+                  )}
                   <TableCell>{new Date(lead.created_at).toLocaleDateString("ru-RU")}</TableCell>
                   <TableCell className="text-right">
                     <Button onClick={() => handleDelete(lead.id)} variant="ghost" size="sm">

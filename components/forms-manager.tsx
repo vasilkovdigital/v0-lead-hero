@@ -1,17 +1,22 @@
+/**
+ * FormsManager - Компонент управления формами пользователя
+ * Поддерживает создание множества форм для админов, удаление форм,
+ * настройку и встраивание форм на сайты
+ */
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Copy, ExternalLink, Users, Code2, Settings, AlertCircle, Plus, Loader2 } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Copy, ExternalLink, Users, Code2, Settings, AlertCircle, Plus, Loader2, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { createUserForm } from "@/app/actions/forms"
+import { createUserForm, deleteUserForm, canCreateMoreForms } from "@/app/actions/forms"
 
 interface Form {
   id: string
@@ -23,22 +28,34 @@ interface Form {
   owner_id: string
 }
 
+interface FormLimitInfo {
+  canCreate: boolean
+  currentCount: number
+  limit: number | null
+}
+
 export function FormsManager() {
-  const [form, setForm] = useState<Form | null>(null)
+  const [forms, setForms] = useState<Form[]>([])
   const [userId, setUserId] = useState<string>("")
   const [userEmail, setUserEmail] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [limitInfo, setLimitInfo] = useState<FormLimitInfo | null>(null)
+  
+  // Диалоги
   const [showEmbedDialog, setShowEmbedDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  
+  // Текущая форма для редактирования
+  const [selectedForm, setSelectedForm] = useState<Form | null>(null)
   const [formName, setFormName] = useState("")
+  const [newFormName, setNewFormName] = useState("")
 
-  useEffect(() => {
-    fetchUserForm()
-  }, [])
-
-  const fetchUserForm = async () => {
+  const fetchUserForms = useCallback(async () => {
     const supabase = createClient()
     const {
       data: { user },
@@ -48,15 +65,27 @@ export function FormsManager() {
       setUserId(user.id)
       setUserEmail(user.email || "")
 
-      const { data: existingForm } = await supabase.from("forms").select("*").eq("owner_id", user.id).single()
+      // Загружаем все формы пользователя
+      const { data: userForms } = await supabase
+        .from("forms")
+        .select("*")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false })
 
-      if (existingForm) {
-        setForm(existingForm)
-        setFormName(existingForm.name)
+      if (userForms) {
+        setForms(userForms)
       }
+
+      // Проверяем лимит форм
+      const info = await canCreateMoreForms(user.id)
+      setLimitInfo(info)
     }
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchUserForms()
+  }, [fetchUserForms])
 
   const createForm = async () => {
     if (!userId || !userEmail) return
@@ -64,7 +93,7 @@ export function FormsManager() {
     setCreating(true)
     setError(null)
 
-    const result = await createUserForm(userId, userEmail)
+    const result = await createUserForm(userId, userEmail, newFormName || undefined)
 
     if (result.error) {
       setError(result.error)
@@ -73,56 +102,97 @@ export function FormsManager() {
     }
 
     if (result.form) {
-      setForm(result.form)
-      setFormName(result.form.name)
+      setForms([result.form, ...forms])
+      setNewFormName("")
+      setShowCreateDialog(false)
+      
+      // Обновляем лимит
+      const info = await canCreateMoreForms(userId)
+      setLimitInfo(info)
     }
     setCreating(false)
   }
 
+  const handleDeleteForm = async () => {
+    if (!selectedForm || !userId) return
+
+    setDeleting(selectedForm.id)
+    const result = await deleteUserForm(userId, selectedForm.id)
+
+    if (result.error) {
+      setError(result.error)
+      setDeleting(null)
+      return
+    }
+
+    setForms(forms.filter(f => f.id !== selectedForm.id))
+    setShowDeleteDialog(false)
+    setSelectedForm(null)
+    setDeleting(null)
+
+    // Обновляем лимит
+    const info = await canCreateMoreForms(userId)
+    setLimitInfo(info)
+  }
+
   const updateFormName = async () => {
-    if (!form) return
+    if (!selectedForm) return
 
     const supabase = createClient()
-    const { error } = await supabase.from("forms").update({ name: formName }).eq("id", form.id)
+    const { error } = await supabase.from("forms").update({ name: formName }).eq("id", selectedForm.id)
 
     if (!error) {
-      setForm({ ...form, name: formName })
+      setForms(forms.map(f => f.id === selectedForm.id ? { ...f, name: formName } : f))
       setShowEditDialog(false)
     }
   }
 
-  const toggleFormActive = async () => {
-    if (!form) return
-
+  const toggleFormActive = async (form: Form) => {
     const supabase = createClient()
     await supabase.from("forms").update({ is_active: !form.is_active }).eq("id", form.id)
-    setForm({ ...form, is_active: !form.is_active })
+    setForms(forms.map(f => f.id === form.id ? { ...f, is_active: !f.is_active } : f))
   }
 
-  const copyFormLink = () => {
-    if (!form) return
+  const copyFormLink = (form: Form) => {
     const link = `${window.location.origin}/form/${form.id}`
     navigator.clipboard.writeText(link)
     alert("Ссылка скопирована!")
   }
 
   const copyEmbedCode = () => {
-    if (!form) return
-    const embedCode = `<iframe src="${window.location.origin}/form/${form.id}" width="100%" height="700" frameborder="0" style="border: none; border-radius: 8px;"></iframe>`
+    if (!selectedForm) return
+    const embedCode = `<iframe src="${window.location.origin}/form/${selectedForm.id}" width="100%" height="700" frameborder="0" style="border: none; border-radius: 8px;"></iframe>`
     navigator.clipboard.writeText(embedCode)
     alert("Код для встраивания скопирован!")
+  }
+
+  const openEditDialog = (form: Form) => {
+    setSelectedForm(form)
+    setFormName(form.name)
+    setShowEditDialog(true)
+  }
+
+  const openEmbedDialog = (form: Form) => {
+    setSelectedForm(form)
+    setShowEmbedDialog(true)
+  }
+
+  const openDeleteDialog = (form: Form) => {
+    setSelectedForm(form)
+    setShowDeleteDialog(true)
   }
 
   if (loading) {
     return <div className="text-center py-12">Загрузка...</div>
   }
 
-  if (!form) {
+  // Нет форм - показываем приглашение создать
+  if (forms.length === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
           <Users className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-lg font-medium mb-2">Форма не найдена</p>
+          <p className="text-lg font-medium mb-2">Форм пока нет</p>
           <p className="text-sm text-muted-foreground mb-6">Создайте форму для сбора лидов</p>
           {error && (
             <Alert variant="destructive" className="mb-4 max-w-md">
@@ -130,119 +200,156 @@ export function FormsManager() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <Button onClick={createForm} disabled={creating}>
-            {creating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Создание...
-              </>
-            ) : (
-              <>
-                <Plus className="mr-2 h-4 w-4" />
-                Создать форму
-              </>
-            )}
+          <Button onClick={() => setShowCreateDialog(true)} disabled={creating}>
+            <Plus className="mr-2 h-4 w-4" />
+            Создать форму
           </Button>
+          
+          {/* Диалог создания */}
+          <CreateFormDialog
+            open={showCreateDialog}
+            onOpenChange={setShowCreateDialog}
+            newFormName={newFormName}
+            setNewFormName={setNewFormName}
+            onCreate={createForm}
+            creating={creating}
+          />
         </CardContent>
       </Card>
     )
   }
 
-  const progressPercent = (form.lead_count / form.lead_limit) * 100
-  const isLimitReached = form.lead_count >= form.lead_limit
+  const isUnlimited = limitInfo?.limit === null
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Моя форма</h2>
-        <p className="text-muted-foreground">Управление вашей формой для сбора лидов</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-2xl font-bold">Мои формы</h2>
+          <p className="text-muted-foreground">
+            {isUnlimited 
+              ? `Всего форм: ${limitInfo?.currentCount || forms.length}` 
+              : `Форм: ${limitInfo?.currentCount || forms.length} / ${limitInfo?.limit}`
+            }
+          </p>
+        </div>
+        {(limitInfo?.canCreate || isUnlimited) && (
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Новая форма
+          </Button>
+        )}
       </div>
 
-      {isLimitReached && (
+      {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Лимит исчерпан</AlertTitle>
-          <AlertDescription>
-            Вы достигли лимита в {form.lead_limit} лидов. Для увеличения лимита напишите на{" "}
-            <a href="mailto:hello@vasilkov.digital" className="underline font-medium">
-              hello@vasilkov.digital
-            </a>
-          </AlertDescription>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Лиды</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {form.lead_count} / {form.lead_limit}
-            </div>
-            <div className="w-full bg-secondary rounded-full h-2 mt-2">
-              <div
-                className={`h-2 rounded-full transition-all ${isLimitReached ? "bg-destructive" : "bg-primary"}`}
-                style={{ width: `${Math.min(progressPercent, 100)}%` }}
-              />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Статус</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Badge variant={form.is_active ? "default" : "secondary"} className="text-lg px-3 py-1">
-              {form.is_active ? "Активна" : "Неактивна"}
-            </Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Создана</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{new Date(form.created_at).toLocaleDateString("ru-RU")}</div>
-          </CardContent>
-        </Card>
+      {/* Список форм */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {forms.map((form) => {
+          const progressPercent = (form.lead_count / form.lead_limit) * 100
+          const isLimitReached = form.lead_count >= form.lead_limit
+
+          return (
+            <Card key={form.id} className="relative">
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-lg truncate">{form.name}</CardTitle>
+                    <CardDescription className="text-xs font-mono truncate">
+                      {form.id}
+                    </CardDescription>
+                  </div>
+                  <Badge variant={form.is_active ? "default" : "secondary"} className="ml-2 shrink-0">
+                    {form.is_active ? "Активна" : "Неактивна"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Прогресс лидов */}
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-muted-foreground">Лиды</span>
+                    <span className={isLimitReached ? "text-destructive font-medium" : ""}>
+                      {form.lead_count} / {form.lead_limit}
+                    </span>
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${isLimitReached ? "bg-destructive" : "bg-primary"}`}
+                      style={{ width: `${Math.min(progressPercent, 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {isLimitReached && (
+                  <p className="text-xs text-destructive">
+                    Лимит исчерпан
+                  </p>
+                )}
+
+                {/* Действия */}
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => copyFormLink(form)}>
+                    <Copy className="h-3 w-3 mr-1" />
+                    Ссылка
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => window.open(`/form/${form.id}`, "_blank")}>
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Открыть
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => openEmbedDialog(form)}>
+                    <Code2 className="h-3 w-3 mr-1" />
+                    Код
+                  </Button>
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t">
+                  <Button variant="ghost" size="sm" onClick={() => openEditDialog(form)}>
+                    <Settings className="h-3 w-3 mr-1" />
+                    Настройки
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => toggleFormActive(form)}
+                  >
+                    {form.is_active ? "Выкл" : "Вкл"}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => openDeleteDialog(form)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Создана: {new Date(form.created_at).toLocaleDateString("ru-RU")}
+                </p>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle>{form.name}</CardTitle>
-              <CardDescription>ID: {form.id}</CardDescription>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setShowEditDialog(true)}>
-              <Settings className="h-4 w-4 mr-1" />
-              Настройки
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={copyFormLink}>
-              <Copy className="h-4 w-4 mr-2" />
-              Копировать ссылку
-            </Button>
-            <Button variant="outline" onClick={() => window.open(`/form/${form.id}`, "_blank")}>
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Открыть форму
-            </Button>
-            <Button variant="outline" onClick={() => setShowEmbedDialog(true)}>
-              <Code2 className="h-4 w-4 mr-2" />
-              Код для сайта
-            </Button>
-            <Button variant="secondary" onClick={toggleFormActive}>
-              {form.is_active ? "Деактивировать" : "Активировать"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Диалог создания формы */}
+      <CreateFormDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        newFormName={newFormName}
+        setNewFormName={setNewFormName}
+        onCreate={createForm}
+        creating={creating}
+      />
 
-      {/* Embed Dialog */}
+      {/* Диалог встраивания */}
       <Dialog open={showEmbedDialog} onOpenChange={setShowEmbedDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -252,7 +359,7 @@ export function FormsManager() {
           <div className="space-y-4">
             <Textarea
               readOnly
-              value={`<iframe src="${window.location.origin}/form/${form.id}" width="100%" height="700" frameborder="0" style="border: none; border-radius: 8px;"></iframe>`}
+              value={selectedForm ? `<iframe src="${window.location.origin}/form/${selectedForm.id}" width="100%" height="700" frameborder="0" style="border: none; border-radius: 8px;"></iframe>` : ""}
               className="font-mono text-xs"
               rows={4}
             />
@@ -269,7 +376,7 @@ export function FormsManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
+      {/* Диалог редактирования */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent>
           <DialogHeader>
@@ -292,6 +399,102 @@ export function FormsManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Диалог удаления */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить форму?</DialogTitle>
+            <DialogDescription>
+              Форма &quot;{selectedForm?.name}&quot; будет удалена вместе со всеми лидами. Это действие нельзя отменить.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Отмена
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteForm}
+              disabled={deleting === selectedForm?.id}
+            >
+              {deleting === selectedForm?.id ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Удаление...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Удалить
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  )
+}
+
+/**
+ * Диалог создания новой формы
+ */
+function CreateFormDialog({
+  open,
+  onOpenChange,
+  newFormName,
+  setNewFormName,
+  onCreate,
+  creating,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  newFormName: string
+  setNewFormName: (name: string) => void
+  onCreate: () => void
+  creating: boolean
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Создать новую форму</DialogTitle>
+          <DialogDescription>
+            Введите название для новой формы сбора лидов
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="newFormName">Название формы</Label>
+            <Input 
+              id="newFormName" 
+              value={newFormName} 
+              onChange={(e) => setNewFormName(e.target.value)} 
+              placeholder="Моя форма"
+              className="mt-2" 
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={onCreate} className="flex-1" disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Создание...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Создать
+                </>
+              )}
+            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Отмена
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

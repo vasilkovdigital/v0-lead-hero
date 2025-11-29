@@ -1,18 +1,35 @@
+/**
+ * ContentEditor - Редактор контента формы
+ * Позволяет настраивать тексты, AI-промпты и другие параметры формы
+ * Поддерживает выбор формы для редактирования если у пользователя несколько форм
+ */
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
-import { Save } from "lucide-react"
+import { Save, Settings } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface ContentItem {
   id: string
   key: string
-  value: any
+  value: string
+}
+
+interface Form {
+  id: string
+  name: string
 }
 
 interface ContentEditorProps {
@@ -20,7 +37,8 @@ interface ContentEditorProps {
 }
 
 export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
-  const [formId, setFormId] = useState<string | null>(propFormId || null)
+  const [forms, setForms] = useState<Form[]>([])
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(propFormId || null)
   const [content, setContent] = useState<Record<string, string>>({})
   const [loadingMessages, setLoadingMessages] = useState<string[]>([])
   const [systemPrompt, setSystemPrompt] = useState<string>("")
@@ -28,17 +46,14 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
-  useEffect(() => {
+  const fetchForms = useCallback(async () => {
     if (propFormId) {
-      setFormId(propFormId)
-      fetchContent(propFormId)
+      setSelectedFormId(propFormId)
+      await fetchContent(propFormId)
       setIsLoading(false)
-    } else {
-      fetchFormAndContent()
+      return
     }
-  }, [propFormId])
 
-  const fetchFormAndContent = async () => {
     const supabase = createClient()
     const {
       data: { user },
@@ -46,14 +61,26 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
 
     if (!user) return
 
-    const { data: form } = await supabase.from("forms").select("id").eq("owner_id", user.id).single()
+    // Загружаем все формы пользователя
+    const { data: userForms } = await supabase
+      .from("forms")
+      .select("id, name")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: false })
 
-    if (form) {
-      setFormId(form.id)
-      await fetchContent(form.id)
+    if (userForms && userForms.length > 0) {
+      setForms(userForms)
+      // Выбираем первую форму по умолчанию
+      setSelectedFormId(userForms[0].id)
+      await fetchContent(userForms[0].id)
     }
+    
     setIsLoading(false)
-  }
+  }, [propFormId])
+
+  useEffect(() => {
+    fetchForms()
+  }, [fetchForms])
 
   const fetchContent = async (fId: string) => {
     const supabase = createClient()
@@ -87,35 +114,42 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
     }
   }
 
+  const handleFormChange = async (formId: string) => {
+    setSelectedFormId(formId)
+    setIsLoading(true)
+    await fetchContent(formId)
+    setIsLoading(false)
+  }
+
   const handleSave = async () => {
-    if (!formId) return
+    if (!selectedFormId) return
 
     setIsSaving(true)
     const supabase = createClient()
 
     for (const [key, value] of Object.entries(content)) {
-      await supabase.from("form_content").upsert({ form_id: formId, key, value }, { onConflict: "form_id,key" })
+      await supabase.from("form_content").upsert({ form_id: selectedFormId, key, value }, { onConflict: "form_id,key" })
     }
 
     for (let i = 0; i < loadingMessages.length; i++) {
       await supabase
         .from("form_content")
         .upsert(
-          { form_id: formId, key: `loading_message_${i + 1}`, value: loadingMessages[i] },
+          { form_id: selectedFormId, key: `loading_message_${i + 1}`, value: loadingMessages[i] },
           { onConflict: "form_id,key" },
         )
     }
 
     await supabase
       .from("form_content")
-      .upsert({ form_id: formId, key: "ai_system_prompt", value: systemPrompt }, { onConflict: "form_id,key" })
+      .upsert({ form_id: selectedFormId, key: "ai_system_prompt", value: systemPrompt }, { onConflict: "form_id,key" })
 
     await supabase
       .from("form_content")
-      .upsert({ form_id: formId, key: "ai_result_format", value: resultFormat }, { onConflict: "form_id,key" })
+      .upsert({ form_id: selectedFormId, key: "ai_result_format", value: resultFormat }, { onConflict: "form_id,key" })
 
     setIsSaving(false)
-    alert("Content saved successfully!")
+    alert("Контент сохранён!")
   }
 
   const handleLoadingMessageChange = (index: number, value: string) => {
@@ -125,11 +159,11 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
   }
 
   if (isLoading) {
-    return <div className="text-center py-8">Loading content...</div>
+    return <div className="text-center py-8">Загрузка контента...</div>
   }
 
-  if (!formId) {
-    return <div className="text-center py-8">No form found. Please create a form first.</div>
+  if (!selectedFormId) {
+    return <div className="text-center py-8">Форма не найдена. Сначала создайте форму.</div>
   }
 
   return (
@@ -137,53 +171,75 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Content Editor</h2>
-            <p className="text-muted-foreground">Customize the text shown to users and AI settings</p>
+            <h2 className="text-2xl font-bold">Редактор контента</h2>
+            <p className="text-muted-foreground">Настройка текстов и AI параметров</p>
           </div>
-          <Button onClick={handleSave} disabled={isSaving}>
-            <Save className="mr-2 h-4 w-4" />
-            {isSaving ? "Saving..." : "Save Changes"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Выбор формы (если несколько) */}
+            {forms.length > 1 && !propFormId && (
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-muted-foreground" />
+                <Select value={selectedFormId || ""} onValueChange={handleFormChange}>
+                  <SelectTrigger className="!h-9 w-[200px]">
+                    <SelectValue placeholder="Выберите форму" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {forms.map((form) => (
+                      <SelectItem key={form.id} value={form.id}>
+                        {form.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <Button onClick={handleSave} disabled={isSaving} className="min-w-[140px]">
+              <Save className="mr-2 h-4 w-4" />
+              {isSaving ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-6">
+          {/* AI Настройки */}
           <div className="p-4 border border-accent/20 rounded-lg space-y-4 bg-accent/5">
-            <h3 className="text-lg font-semibold text-accent">AI Settings</h3>
+            <h3 className="text-lg font-semibold text-accent">Настройки AI</h3>
 
             <div className="space-y-2">
-              <Label htmlFor="system_prompt">System Prompt (OpenAI)</Label>
+              <Label htmlFor="system_prompt">Системный промпт (OpenAI)</Label>
               <Textarea
                 id="system_prompt"
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder="Enter the system prompt for OpenAI..."
+                placeholder="Введите системный промпт для OpenAI..."
                 rows={6}
                 className="font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                This prompt instructs the AI on how to analyze websites and generate recommendations.
+                Этот промпт инструктирует AI как анализировать сайты и генерировать рекомендации.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="result_format">Result Format</Label>
+              <Label htmlFor="result_format">Формат результата</Label>
               <select
                 id="result_format"
                 value={resultFormat}
                 onChange={(e) => setResultFormat(e.target.value)}
                 className="w-full h-10 px-3 rounded border border-input bg-background"
               >
-                <option value="text">Text</option>
-                <option value="image">Image (DALL-E)</option>
+                <option value="text">Текст</option>
+                <option value="image">Изображение (DALL-E)</option>
               </select>
               <p className="text-xs text-muted-foreground">
-                Choose whether results should be plain text or generated as an image using DALL-E 3.
+                Выберите формат результата: текст или сгенерированное изображение через DALL-E 3.
               </p>
             </div>
           </div>
 
+          {/* Основные тексты */}
           <div className="space-y-2">
-            <Label htmlFor="page_title">Page Title</Label>
+            <Label htmlFor="page_title">Заголовок страницы</Label>
             <Input
               id="page_title"
               value={content.page_title || ""}
@@ -192,7 +248,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="page_subtitle">Page Subtitle</Label>
+            <Label htmlFor="page_subtitle">Подзаголовок страницы</Label>
             <Textarea
               id="page_subtitle"
               value={content.page_subtitle || ""}
@@ -201,7 +257,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="url_placeholder">URL Input Placeholder</Label>
+            <Label htmlFor="url_placeholder">Плейсхолдер для URL</Label>
             <Input
               id="url_placeholder"
               value={content.url_placeholder || ""}
@@ -210,7 +266,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="submit_button">Submit Button Text</Label>
+            <Label htmlFor="submit_button">Текст кнопки отправки</Label>
             <Input
               id="submit_button"
               value={content.submit_button || ""}
@@ -219,7 +275,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="disclaimer">Disclaimer Text</Label>
+            <Label htmlFor="disclaimer">Дисклеймер</Label>
             <Input
               id="disclaimer"
               value={content.disclaimer || ""}
@@ -227,21 +283,23 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
             />
           </div>
 
+          {/* Сообщения загрузки */}
           <div className="space-y-2">
-            <Label>Loading Messages</Label>
-            <p className="text-xs text-muted-foreground mb-2">Messages shown while AI generates the result</p>
+            <Label>Сообщения загрузки</Label>
+            <p className="text-xs text-muted-foreground mb-2">Показываются пока AI генерирует результат</p>
             {[0, 1, 2].map((index) => (
               <Input
                 key={index}
                 value={loadingMessages[index] || ""}
                 onChange={(e) => handleLoadingMessageChange(index, e.target.value)}
-                placeholder={`Loading message ${index + 1}`}
+                placeholder={`Сообщение ${index + 1}`}
               />
             ))}
           </div>
 
+          {/* Результат */}
           <div className="space-y-2">
-            <Label htmlFor="result_title">Result Title</Label>
+            <Label htmlFor="result_title">Заголовок результата</Label>
             <Input
               id="result_title"
               value={content.result_title || ""}
@@ -250,7 +308,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="result_blur_text">Result Blur Text (shown before email)</Label>
+            <Label htmlFor="result_blur_text">Текст блюра результата (до ввода email)</Label>
             <Input
               id="result_blur_text"
               value={content.result_blur_text || ""}
@@ -258,8 +316,9 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
             />
           </div>
 
+          {/* Email форма */}
           <div className="space-y-2">
-            <Label htmlFor="email_title">Email Capture Title</Label>
+            <Label htmlFor="email_title">Заголовок email формы</Label>
             <Input
               id="email_title"
               value={content.email_title || ""}
@@ -268,7 +327,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email_subtitle">Email Capture Subtitle</Label>
+            <Label htmlFor="email_subtitle">Подзаголовок email формы</Label>
             <Textarea
               id="email_subtitle"
               value={content.email_subtitle || ""}
@@ -277,7 +336,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email_placeholder">Email Placeholder</Label>
+            <Label htmlFor="email_placeholder">Плейсхолдер email</Label>
             <Input
               id="email_placeholder"
               value={content.email_placeholder || ""}
@@ -286,7 +345,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email_button">Email Button Text</Label>
+            <Label htmlFor="email_button">Текст кнопки email</Label>
             <Input
               id="email_button"
               value={content.email_button || ""}
@@ -294,8 +353,9 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
             />
           </div>
 
+          {/* Успех */}
           <div className="space-y-2">
-            <Label htmlFor="success_title">Success Title</Label>
+            <Label htmlFor="success_title">Заголовок успеха</Label>
             <Input
               id="success_title"
               value={content.success_title || ""}
@@ -304,7 +364,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="success_message">Success Message</Label>
+            <Label htmlFor="success_message">Сообщение успеха</Label>
             <Textarea
               id="success_message"
               value={content.success_message || ""}
@@ -313,7 +373,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="share_button">Share Button Text</Label>
+            <Label htmlFor="share_button">Текст кнопки "Поделиться"</Label>
             <Input
               id="share_button"
               value={content.share_button || ""}
@@ -322,7 +382,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="download_button">Download Button Text</Label>
+            <Label htmlFor="download_button">Текст кнопки "Скачать"</Label>
             <Input
               id="download_button"
               value={content.download_button || ""}
