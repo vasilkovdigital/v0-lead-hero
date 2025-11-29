@@ -127,6 +127,73 @@ IMPORTANT FORMATTING RULES:
     const urlContent = await fetchUrlContent(url)
 
     if (resultFormat === "image") {
+      // Получаем отдельный промпт для генерации изображений (если задан)
+      const imagePromptTemplate = getContent(
+        "ai_image_prompt",
+        `Create a professional, high-quality interior design visualization. 
+Style: Modern, elegant, photorealistic.
+The image should be suitable for a professional design presentation.
+Based on the following preferences: {context}`
+      )
+
+      // Сначала используем GPT для создания безопасного промпта для DALL-E
+      // на основе контента URL и шаблона
+      let dallePrompt: string
+      
+      try {
+        const promptResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert at creating DALL-E image prompts for interior design visualization.
+Your task is to create a SAFE, APPROPRIATE prompt for DALL-E based on user preferences.
+
+CRITICAL RULES:
+- Output ONLY the prompt text, nothing else
+- The prompt must be in English
+- Keep it under 900 characters
+- Focus on: room type, style, colors, furniture, lighting, atmosphere
+- NEVER include: people, faces, text, brand names, copyrighted content
+- Make it professional and suitable for interior design presentation
+- If user content seems inappropriate, create a generic modern interior prompt instead`,
+              },
+              {
+                role: "user",
+                content: `User template: ${imagePromptTemplate}
+
+User preferences from URL content:
+${urlContent.slice(0, 1500)}
+
+Create a DALL-E prompt for interior design visualization:`,
+              },
+            ],
+            max_tokens: 300,
+            temperature: 0.7,
+          }),
+        })
+
+        if (!promptResponse.ok) {
+          console.error("[v0] GPT prompt generation failed, using default prompt")
+          dallePrompt = "A beautiful modern living room interior with natural lighting, elegant furniture, neutral color palette, professional interior design visualization, photorealistic, 8k quality"
+        } else {
+          const promptData = await promptResponse.json()
+          dallePrompt = promptData.choices[0]?.message?.content?.trim() || 
+            "A beautiful modern interior design visualization, professional, photorealistic, elegant furniture and decor"
+        }
+      } catch (promptError) {
+        console.error("[v0] Error generating DALL-E prompt:", promptError)
+        dallePrompt = "A beautiful modern living room interior with natural lighting, elegant furniture, neutral color palette, professional interior design visualization, photorealistic"
+      }
+
+      console.log("[v0] Generated DALL-E prompt:", dallePrompt.slice(0, 100) + "...")
+
       const imageResponse = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: {
@@ -135,7 +202,7 @@ IMPORTANT FORMATTING RULES:
         },
         body: JSON.stringify({
           model: "dall-e-3",
-          prompt: systemPrompt, // Use the prompt from admin panel
+          prompt: dallePrompt,
           n: 1,
           size: "1024x1024",
           quality: "standard",
@@ -150,10 +217,46 @@ IMPORTANT FORMATTING RULES:
           errorData = { error: { message: `HTTP ${imageResponse.status}: ${imageResponse.statusText}` } }
         }
         console.error("[v0] DALL-E API error:", errorData)
+        
+        // Если DALL-E отклонил запрос, пробуем с дефолтным безопасным промптом
+        if (imageResponse.status === 400) {
+          console.log("[v0] Retrying with safe default prompt...")
+          const retryResponse = await fetch("https://api.openai.com/v1/images/generations", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: "dall-e-3",
+              prompt: "A beautiful modern living room interior with natural lighting, elegant furniture, soft neutral color palette, professional interior design visualization, photorealistic rendering, high quality architectural photography style",
+              n: 1,
+              size: "1024x1024",
+              quality: "standard",
+            }),
+          })
+
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json()
+            const retryImageUrl = retryData.data[0]?.url || ""
+            return Response.json(
+              {
+                success: true,
+                result: {
+                  type: "image",
+                  imageUrl: retryImageUrl,
+                  text: `Создано на основе ваших предпочтений`,
+                },
+              },
+              { headers: corsHeaders },
+            )
+          }
+        }
+        
         return Response.json(
           {
-            error: "DALL-E API error",
-            details: errorData.error?.message || "Unknown error",
+            error: "Ошибка генерации изображения",
+            details: "Не удалось сгенерировать изображение. Попробуйте ещё раз или измените ссылку.",
           },
           { status: imageResponse.status, headers: corsHeaders },
         )
@@ -168,7 +271,7 @@ IMPORTANT FORMATTING RULES:
           result: {
             type: "image",
             imageUrl: imageUrl,
-            text: `Generated based on: ${url}`,
+            text: `Создано на основе ваших предпочтений`,
           },
         },
         { headers: corsHeaders },
