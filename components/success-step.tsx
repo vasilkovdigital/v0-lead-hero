@@ -112,7 +112,7 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
         
         // Добавляем заголовок и текст
         tempContainer.innerHTML = `
-          <h1 style="font-size: 16px; font-weight: bold; margin: 0 0 10px 0;">Ваши рекомендации</h1>
+          <h1 style="font-size: 16px; font-weight: bold; margin: 10px 0 10px 0; padding-top: 10px;">Ваши рекомендации</h1>
           <div style="white-space: pre-wrap; word-wrap: break-word;">${result.text.replace(/\n/g, "<br>")}</div>
         `
         
@@ -139,7 +139,7 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
               const maxHeight = pageHeight - margin * 2
               
               if (imgHeight <= maxHeight) {
-                pdf.addImage(imgData, "PNG", margin, yPos, Math.min(imgWidth, maxWidth), imgHeight)
+                pdf.addImage(imgData, "PNG", margin, margin, Math.min(imgWidth, maxWidth), imgHeight)
               } else {
                 // Разбиваем на страницы
                 const pages = Math.ceil(imgHeight / maxHeight)
@@ -184,7 +184,7 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
             // Рассчитываем размеры
             const textLines = result.text.split("\n")
             const maxWidthPx = maxWidth * 3.779527559
-            let totalHeight = 30 // место для заголовка
+            let totalHeight = 50 // место для заголовка с отступом сверху
             
             // Рассчитываем высоту текста
             for (const line of textLines) {
@@ -211,10 +211,10 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
             ctx.fillRect(0, 0, canvas.width, canvas.height)
             ctx.fillStyle = "#000000"
             ctx.font = `bold ${16}px Arial`
-            ctx.fillText("Ваши рекомендации", 20, 10)
+            ctx.fillText("Ваши рекомендации", 20, 20)
             
             ctx.font = `${fontSize}px Arial`
-            let yPos = 30
+            let yPos = 40
             
             for (const line of textLines) {
               if (!line.trim()) {
@@ -248,16 +248,19 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
             const imgWidth = canvas.width / 3.779527559
             const imgHeight = canvas.height / 3.779527559
             
-            if (imgHeight <= pageHeight - margin * 2) {
+            const maxHeight = pageHeight - margin * 2
+            if (imgHeight <= maxHeight) {
               pdf.addImage(imgData, "PNG", margin, margin, Math.min(imgWidth, maxWidth), imgHeight)
             } else {
               // Разбиваем на страницы
-              const maxHeight = pageHeight - margin * 2
               const pages = Math.ceil(imgHeight / maxHeight)
               for (let i = 0; i < pages; i++) {
                 if (i > 0) pdf.addPage()
-                const sourceY = (i * maxHeight) * 3.779527559
-                const sourceHeight = Math.min(maxHeight * 3.779527559, canvas.height - sourceY)
+                // Для первой страницы начинаем с начала canvas (где заголовок)
+                // Для последующих страниц смещаемся на высоту страницы
+                const sourceY = i === 0 ? 0 : (i * maxHeight) * 3.779527559
+                const remainingHeight = canvas.height - sourceY
+                const sourceHeight = Math.min(maxHeight * 3.779527559, remainingHeight)
                 const destHeight = sourceHeight / 3.779527559
                 
                 const pageCanvas = document.createElement("canvas")
@@ -275,12 +278,12 @@ export function SuccessStep({ result, onRestart }: SuccessStepProps) {
             // Последний fallback: стандартный метод jsPDF
             pdf.setFontSize(16)
             pdf.setFont("helvetica", "bold")
-            pdf.text("Ваши рекомендации", margin, margin)
+            pdf.text("Ваши рекомендации", margin, margin + 5)
             
             pdf.setFontSize(11)
             pdf.setFont("helvetica", "normal")
             const lines = pdf.splitTextToSize(result.text, maxWidth)
-            pdf.text(lines, margin, margin + 15)
+            pdf.text(lines, margin, margin + 20)
           }
           
           document.body.removeChild(tempContainer)
