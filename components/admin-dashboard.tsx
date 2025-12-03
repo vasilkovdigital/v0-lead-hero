@@ -113,7 +113,7 @@ export function AdminDashboard() {
                 <ContentEditor />
               </TabsContent>
               <TabsContent value="leads" className="space-y-4">
-                <LeadsTable formId={MAIN_FORM_ID} />
+                <LeadsTable />
               </TabsContent>
               <TabsContent value="users" className="space-y-4">
                 <UsersTable />

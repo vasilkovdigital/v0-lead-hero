@@ -44,6 +44,7 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
   const [forms, setForms] = useState<Form[]>([])
   const [selectedFormId, setSelectedFormId] = useState<string | "all">("all")
   const [isLoading, setIsLoading] = useState(true)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   const fetchFormsAndLeads = useCallback(async () => {
     const supabase = createClient()
@@ -53,7 +54,43 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
 
     if (!user) return
 
-    // Если передан конкретный formId (суперадмин), показываем только его лиды
+    // Проверяем роль пользователя
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    const userRole = userData?.role || "user"
+    const isSuperAdminUser = userRole === "superadmin"
+    setIsSuperAdmin(isSuperAdminUser)
+
+    // Если superadmin, показываем все лиды и все формы
+    if (isSuperAdminUser) {
+      // Загружаем все формы для фильтрации
+      const { data: allForms } = await supabase
+        .from("forms")
+        .select("id, name")
+        .order("created_at", { ascending: false })
+
+      if (allForms) {
+        setForms(allForms)
+      }
+
+      // Загружаем все лиды
+      const { data: allLeads, error } = await supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (!error && allLeads) {
+        setLeads(allLeads)
+      }
+      setIsLoading(false)
+      return
+    }
+
+    // Если передан конкретный formId, показываем только его лиды
     if (propFormId) {
       const { data, error } = await supabase
         .from("leads")
@@ -176,8 +213,8 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          {/* Фильтр по формам (только если есть несколько форм) */}
-          {forms.length > 1 && !propFormId && (
+          {/* Фильтр по формам (если есть несколько форм или superadmin) */}
+          {(forms.length > 1 || isSuperAdmin) && !propFormId && (
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
               <Select value={selectedFormId} onValueChange={setSelectedFormId}>
@@ -214,7 +251,7 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
               <TableHead className="min-w-[120px]">Email</TableHead>
               <TableHead className="min-w-[100px]">Статус</TableHead>
               <TableHead className="min-w-[150px]">Результат</TableHead>
-              {forms.length > 1 && !propFormId && <TableHead className="min-w-[100px]">Форма</TableHead>}
+              {(forms.length > 1 || isSuperAdmin) && !propFormId && <TableHead className="min-w-[100px]">Форма</TableHead>}
               <TableHead className="min-w-[100px]">Дата</TableHead>
               <TableHead className="text-right min-w-[80px]">Действия</TableHead>
             </TableRow>
@@ -222,7 +259,7 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
           <TableBody>
             {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={forms.length > 1 && !propFormId ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={(forms.length > 1 || isSuperAdmin) && !propFormId ? 7 : 6} className="text-center py-8 text-muted-foreground">
                   Лидов пока нет
                 </TableCell>
               </TableRow>
@@ -252,7 +289,7 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
                       "-"
                     )}
                   </TableCell>
-                  {forms.length > 1 && !propFormId && (
+                  {(forms.length > 1 || isSuperAdmin) && !propFormId && (
                     <TableCell className="text-xs sm:text-sm text-muted-foreground">
                       {getFormName(lead.form_id)}
                     </TableCell>
