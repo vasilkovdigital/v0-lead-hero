@@ -153,34 +153,38 @@ export function UsersTable() {
                       <TableCell className="text-xs sm:text-sm text-center tabular-nums">
                         {user.form_count}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {isSuperAdmin ? (
                           <div className="text-center text-muted-foreground text-sm">∞</div>
                         ) : (
-                          <QuotaCounter
-                            value={user.max_forms}
-                            onChange={(value) => handleQuotaUpdate(user.id, "max_forms", value)}
-                            min={0}
-                            disabled={isSuperAdmin}
-                            loading={isUpdating}
-                          />
+                          <div className="flex justify-center">
+                            <QuotaCounter
+                              value={user.max_forms ?? 0}
+                              onChange={(value) => handleQuotaUpdate(user.id, "max_forms", value)}
+                              min={0}
+                              disabled={isSuperAdmin}
+                              loading={isUpdating}
+                            />
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="text-xs sm:text-sm text-center tabular-nums">
                         {user.lead_count}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {isSuperAdmin ? (
                           <div className="text-center text-muted-foreground text-sm">∞</div>
                         ) : (
-                          <QuotaCounter
-                            value={user.max_leads}
-                            onChange={(value) => handleQuotaUpdate(user.id, "max_leads", value)}
-                            min={0}
-                            step={10}
-                            disabled={isSuperAdmin}
-                            loading={isUpdating}
-                          />
+                          <div className="flex justify-center">
+                            <QuotaCounter
+                              value={user.max_leads ?? 0}
+                              onChange={(value) => handleQuotaUpdate(user.id, "max_leads", value)}
+                              min={0}
+                              step={10}
+                              disabled={isSuperAdmin}
+                              loading={isUpdating}
+                            />
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="text-center">

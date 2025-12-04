@@ -5,8 +5,8 @@ import { Minus, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface QuotaCounterProps {
-  value: number | null
-  onChange: (value: number | null) => void
+  value: number
+  onChange: (value: number) => void
   min?: number
   max?: number
   step?: number
@@ -25,31 +25,19 @@ export function QuotaCounter({
   loading = false,
   className,
 }: QuotaCounterProps) {
-  const isUnlimited = value === null
-  const displayValue = isUnlimited ? "∞" : value
-
   const handleDecrement = () => {
     if (disabled || loading) return
-    if (isUnlimited) {
-      // Переход от безлимита к начальному значению (min или 1000 если min = 0)
-      onChange(min > 0 ? min : 1000)
-    } else if (value > min) {
+    if (value > min) {
       onChange(value - step)
     }
   }
 
   const handleIncrement = () => {
     if (disabled || loading) return
-    if (isUnlimited) return // Уже безлимит
     // Если max не задан, можно увеличивать без ограничений
     if (max === undefined || value < max) {
       onChange(value + step)
     }
-  }
-
-  const handleSetUnlimited = () => {
-    if (disabled || loading) return
-    onChange(null)
   }
 
   return (
@@ -59,7 +47,7 @@ export function QuotaCounter({
         size="icon"
         className="h-7 w-7"
         onClick={handleDecrement}
-        disabled={disabled || loading || (!isUnlimited && value <= min)}
+        disabled={disabled || loading || value <= min}
       >
         <Minus className="h-3 w-3" />
       </Button>
@@ -70,7 +58,7 @@ export function QuotaCounter({
           loading && "opacity-50"
         )}
       >
-        {displayValue}
+        {value}
       </span>
       
       <Button
@@ -78,20 +66,9 @@ export function QuotaCounter({
         size="icon"
         className="h-7 w-7"
         onClick={handleIncrement}
-        disabled={disabled || loading || isUnlimited || (max !== undefined && value >= max)}
+        disabled={disabled || loading || (max !== undefined && value >= max)}
       >
         <Plus className="h-3 w-3" />
-      </Button>
-      
-      <Button
-        variant={isUnlimited ? "default" : "outline"}
-        size="icon"
-        className="h-7 w-7 ml-1"
-        onClick={handleSetUnlimited}
-        disabled={disabled || loading || isUnlimited}
-        title="Безлимит"
-      >
-        <span className="text-xs font-bold">∞</span>
       </Button>
     </div>
   )
