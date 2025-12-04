@@ -1,6 +1,7 @@
 /**
  * Server Actions для работы с пользователями
  * - getAllUsers: получение всех пользователей (только для суперадминов)
+ * - updateUserQuotas: обновление квот пользователя (только для суперадминов)
  */
 "use server"
 
@@ -16,6 +17,16 @@ interface UserWithStats {
   created_at: string
   form_count: number
   lead_count: number
+  max_forms: number | null
+  max_leads: number | null
+  can_publish_forms: boolean
+}
+
+interface UpdateUserQuotasParams {
+  userId: string
+  max_forms?: number | null
+  max_leads?: number | null
+  can_publish_forms?: boolean
 }
 
 /**
@@ -61,18 +72,104 @@ export async function getAllUsers(): Promise<{ users: UserWithStats[] } | { erro
       const leadCount = forms?.reduce((sum, f) => sum + (f.lead_count || 0), 0) || 0
 
       return {
-        ...user,
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        created_at: user.created_at,
         form_count: formCount,
         lead_count: leadCount,
+        max_forms: user.max_forms ?? null,
+        max_leads: user.max_leads ?? null,
+        can_publish_forms: user.can_publish_forms ?? true,
       }
     }),
   )
 
-  return { users: usersWithStats }
+  // Сортируем по ролям: superadmin -> admin -> user
+  // Внутри каждой группы сортируем по дате создания (новые сверху)
+  const rolePriority: Record<string, number> = {
+    superadmin: 1,
+    admin: 2,
+    user: 3,
+  }
+
+  const sortedUsers = usersWithStats.sort((a, b) => {
+    const priorityA = rolePriority[a.role] || 99
+    const priorityB = rolePriority[b.role] || 99
+    
+    // Сначала по роли
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB
+    }
+    
+    // Затем по дате создания (новые сверху)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+
+  return { users: sortedUsers }
 }
 
+/**
+ * Обновляет квоты пользователя (только для суперадминов)
+ */
+export async function updateUserQuotas(
+  params: UpdateUserQuotasParams
+): Promise<{ success: boolean } | { error: string }> {
+  // Получаем текущего пользователя через серверный клиент
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
+  if (!user) {
+    return { error: "Не авторизован" }
+  }
 
+  // Проверяем, является ли пользователь суперадмином
+  const { data: currentUser } = await supabaseAdmin
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single()
 
+  if (currentUser?.role !== "superadmin") {
+    return { error: "Доступ запрещён" }
+  }
+
+  // Нельзя изменять квоты самому себе (защита от случайного самоограничения)
+  if (params.userId === user.id) {
+    return { error: "Нельзя изменять собственные квоты" }
+  }
+
+  // Формируем объект для обновления
+  const updateData: Record<string, unknown> = {}
+  
+  if (params.max_forms !== undefined) {
+    updateData.max_forms = params.max_forms
+  }
+  if (params.max_leads !== undefined) {
+    updateData.max_leads = params.max_leads
+  }
+  if (params.can_publish_forms !== undefined) {
+    updateData.can_publish_forms = params.can_publish_forms
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return { error: "Нет данных для обновления" }
+  }
+
+  // Обновляем квоты пользователя
+  const { error } = await supabaseAdmin
+    .from("users")
+    .update(updateData)
+    .eq("id", params.userId)
+
+  if (error) {
+    console.error("Error updating user quotas:", error)
+    return { error: "Ошибка обновления квот: " + error.message }
+  }
+
+  return { success: true }
+}
 
 

@@ -12,45 +12,51 @@ const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, proces
 
 /**
  * Проверяет, может ли пользователь создать ещё форму
+ * Использует max_forms из таблицы users (NULL = неограниченно)
  */
-export async function canCreateMoreForms(userId: string): Promise<{ canCreate: boolean; currentCount: number; limit: number | null }> {
-  // Проверяем роль пользователя
+export async function canCreateMoreForms(userId: string): Promise<{ canCreate: boolean; currentCount: number; limit: number | null; canPublish: boolean }> {
+  // Получаем данные пользователя включая квоты
   const { data: user } = await supabaseAdmin
     .from("users")
-    .select("role")
+    .select("role, max_forms, can_publish_forms")
     .eq("id", userId)
     .single()
 
-  // Админы и суперадмины могут создавать неограниченно
-  const isUnlimited = user?.role === "admin" || user?.role === "superadmin"
-  
-  if (isUnlimited) {
-    const { count } = await supabaseAdmin
-      .from("forms")
-      .select("*", { count: "exact", head: true })
-      .eq("owner_id", userId)
-    
-    return { canCreate: true, currentCount: count || 0, limit: null }
-  }
-
-  // Обычные пользователи - лимит 1 форма
+  // Получаем текущее количество форм
   const { count } = await supabaseAdmin
     .from("forms")
     .select("*", { count: "exact", head: true })
     .eq("owner_id", userId)
 
-  return { canCreate: (count || 0) < 1, currentCount: count || 0, limit: 1 }
+  const currentCount = count || 0
+  const canPublish = user?.can_publish_forms ?? true
+  const maxForms = user?.max_forms ?? null // NULL = неограниченно
+
+  // Если max_forms = NULL, лимита нет
+  if (maxForms === null) {
+    return { canCreate: canPublish, currentCount, limit: null, canPublish }
+  }
+
+  // Проверяем лимит
+  const canCreate = canPublish && currentCount < maxForms
+
+  return { canCreate, currentCount, limit: maxForms, canPublish }
 }
 
 /**
  * Создаёт новую форму для пользователя
  */
 export async function createUserForm(userId: string, userEmail: string, formName?: string) {
-  // Проверяем лимит форм
-  const { canCreate } = await canCreateMoreForms(userId)
+  // Проверяем лимит форм и права на публикацию
+  const { canCreate, canPublish, currentCount, limit } = await canCreateMoreForms(userId)
+  
+  if (!canPublish) {
+    return { error: "Публикация форм отключена для вашего аккаунта. Свяжитесь с администратором." }
+  }
   
   if (!canCreate) {
-    return { error: "Достигнут лимит форм. Для увеличения лимита свяжитесь с администратором." }
+    const limitText = limit !== null ? `${currentCount}/${limit}` : currentCount.toString()
+    return { error: `Достигнут лимит форм (${limitText}). Для увеличения лимита свяжитесь с администратором.` }
   }
 
   // Убеждаемся что пользователь существует в public.users

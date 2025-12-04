@@ -17,6 +17,36 @@ interface CreateLeadParams {
   resultImageUrl: string | null
 }
 
+/**
+ * Проверяет лимит лидов для владельца формы
+ * @returns true если лимит не превышен или нет лимита, false если превышен
+ */
+async function checkLeadLimit(ownerId: string): Promise<{ canCreate: boolean; currentCount: number; limit: number | null }> {
+  // Получаем max_leads пользователя
+  const { data: user } = await supabaseAdmin
+    .from("users")
+    .select("max_leads")
+    .eq("id", ownerId)
+    .single()
+
+  const maxLeads = user?.max_leads ?? null // NULL = неограниченно
+
+  // Получаем текущее количество лидов по всем формам пользователя
+  const { data: forms } = await supabaseAdmin
+    .from("forms")
+    .select("lead_count")
+    .eq("owner_id", ownerId)
+
+  const currentCount = forms?.reduce((sum, f) => sum + (f.lead_count || 0), 0) || 0
+
+  // Если max_leads = NULL, лимита нет
+  if (maxLeads === null) {
+    return { canCreate: true, currentCount, limit: null }
+  }
+
+  return { canCreate: currentCount < maxLeads, currentCount, limit: maxLeads }
+}
+
 export async function createLead({ formId, email, url, resultText, resultImageUrl }: CreateLeadParams) {
   const isTestEmail = email.toLowerCase() === TEST_EMAIL.toLowerCase()
 
@@ -34,6 +64,24 @@ export async function createLead({ formId, email, url, resultText, resultImageUr
   } catch (error) {
     // Если не удалось получить пользователя (например, анонимный запрос), продолжаем
     console.error("Error checking form owner:", error)
+  }
+
+  // Проверяем лимит лидов для владельца формы (если это не тестовый email и не владелец)
+  if (!isTestEmail && !isOwner) {
+    // Получаем владельца формы
+    const { data: form } = await supabaseAdmin
+      .from("forms")
+      .select("owner_id")
+      .eq("id", formId)
+      .single()
+
+    if (form?.owner_id) {
+      const { canCreate, currentCount, limit } = await checkLeadLimit(form.owner_id)
+      if (!canCreate) {
+        const limitText = limit !== null ? `${currentCount}/${limit}` : currentCount.toString()
+        return { error: `Достигнут лимит лидов для этой формы (${limitText}). Владельцу необходимо связаться с администратором.` }
+      }
+    }
   }
 
   if (isTestEmail || isOwner) {
