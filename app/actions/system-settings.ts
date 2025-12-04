@@ -54,6 +54,15 @@ export async function getGlobalSystemPrompt(): Promise<string | null> {
 }
 
 /**
+ * Получает глобальный промпт для генерации изображений (DALL-E)
+ * Используется в API /api/generate для режима image
+ */
+export async function getGlobalImagePrompt(): Promise<string | null> {
+  const { value } = await getSystemSetting("global_image_prompt")
+  return value
+}
+
+/**
  * Обновляет системную настройку (только для суперадминов)
  */
 export async function updateSystemSetting(

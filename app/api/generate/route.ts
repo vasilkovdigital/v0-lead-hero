@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { getGlobalSystemPrompt } from "@/app/actions/system-settings"
+import { getGlobalSystemPrompt, getGlobalImagePrompt } from "@/app/actions/system-settings"
 
 export const maxDuration = 60
 
@@ -115,45 +115,29 @@ export async function POST(req: Request) {
     // Получаем глобальный системный промпт
     const globalPrompt = await getGlobalSystemPrompt()
 
-    // Получаем промпт формы
-    const formPrompt = getContent(
-      "ai_system_prompt",
-      `You are an expert consultant. Analyze the provided content and give personalized, actionable recommendations.
-
-FORMATTING GUIDELINES:
-- Use markdown formatting for better readability
-- Use **bold** for emphasis on important points
-- Use ## for section headings (h2)
-- Use ### for subsections (h3)
-- Use - or * for bullet lists
-- Use numbered lists (1. 2. 3.) for ordered recommendations
-- Keep paragraphs separated by blank lines
-- Use clear, professional language
-- Structure your response with clear sections and subsections
-
-Example format:
-## Section Title
-**Key point:** Detailed explanation here.
-
-### Subsection
-- First recommendation
-- Second recommendation
-
-## Another Section
-More content here.`,
-    )
+    // Получаем промпт формы (может быть пустым)
+    const formPrompt = getContent("ai_system_prompt", "")
 
     // Комбинируем глобальный и формовый промпты
-    const systemPrompt = globalPrompt 
-      ? `${globalPrompt}\n\n---\n\n${formPrompt}`
-      : formPrompt
+    // Если есть глобальный промпт, добавляем его как префикс
+    let systemPrompt: string
+    if (globalPrompt && formPrompt) {
+      systemPrompt = `${globalPrompt}\n\n---\n\n${formPrompt}`
+    } else if (globalPrompt) {
+      systemPrompt = globalPrompt
+    } else if (formPrompt) {
+      systemPrompt = formPrompt
+    } else {
+      // Минимальный fallback если ничего не задано
+      systemPrompt = "You are an expert consultant. Analyze the provided content and provide helpful recommendations."
+    }
 
     const resultFormat = getContent("ai_result_format", "text")
 
     const urlContent = await fetchUrlContent(url)
 
     if (resultFormat === "image") {
-      // Получаем отдельный промпт для генерации изображений (если задан)
+      // Получаем отдельный промпт для генерации изображений (если задан в форме)
       const imagePromptTemplate = getContent(
         "ai_image_prompt",
         `Create a professional, high-quality interior design visualization. 
@@ -161,6 +145,25 @@ Style: Modern, elegant, photorealistic.
 The image should be suitable for a professional design presentation.
 Based on the following preferences: {context}`
       )
+
+      // Получаем глобальный системный промпт для изображений
+      const globalImagePrompt = await getGlobalImagePrompt()
+      
+      // Дефолтный промпт если глобальный не задан
+      const defaultImageSystemPrompt = `You are an expert at creating DALL-E image prompts for interior design visualization.
+Your task is to create a SAFE, APPROPRIATE prompt for DALL-E based on user preferences.
+
+CRITICAL RULES:
+- Output ONLY the prompt text, nothing else
+- The prompt must be in English
+- Keep it under 900 characters
+- Focus on: room type, style, colors, furniture, lighting, atmosphere
+- NEVER include: people, faces, text, brand names, copyrighted content
+- Make it professional and suitable for interior design presentation
+- If user content seems inappropriate, create a generic modern interior prompt instead`
+
+      // Используем глобальный промпт если задан, иначе дефолтный
+      const imageSystemPrompt = globalImagePrompt || defaultImageSystemPrompt
 
       // Сначала используем GPT для создания безопасного промпта для DALL-E
       // на основе контента URL и шаблона
@@ -178,17 +181,7 @@ Based on the following preferences: {context}`
             messages: [
               {
                 role: "system",
-                content: `You are an expert at creating DALL-E image prompts for interior design visualization.
-Your task is to create a SAFE, APPROPRIATE prompt for DALL-E based on user preferences.
-
-CRITICAL RULES:
-- Output ONLY the prompt text, nothing else
-- The prompt must be in English
-- Keep it under 900 characters
-- Focus on: room type, style, colors, furniture, lighting, atmosphere
-- NEVER include: people, faces, text, brand names, copyrighted content
-- Make it professional and suitable for interior design presentation
-- If user content seems inappropriate, create a generic modern interior prompt instead`,
+                content: imageSystemPrompt,
               },
               {
                 role: "user",

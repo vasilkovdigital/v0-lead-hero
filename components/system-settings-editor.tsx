@@ -18,6 +18,7 @@ import { getSystemSetting, updateSystemSetting } from "@/app/actions/system-sett
 export function SystemSettingsEditor() {
   const [userId, setUserId] = useState<string>("")
   const [globalPrompt, setGlobalPrompt] = useState<string>("")
+  const [globalImagePrompt, setGlobalImagePrompt] = useState<string>("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle")
@@ -46,6 +47,12 @@ export function SystemSettingsEditor() {
       setGlobalPrompt(value)
     }
 
+    // Загружаем глобальный промпт для изображений
+    const { value: imageValue } = await getSystemSetting("global_image_prompt")
+    if (imageValue) {
+      setGlobalImagePrompt(imageValue)
+    }
+
     setIsLoading(false)
   }, [])
 
@@ -68,13 +75,17 @@ export function SystemSettingsEditor() {
     setSaveStatus("idle")
     setErrorMessage("")
 
-    const result = await updateSystemSetting(userId, "global_system_prompt", globalPrompt)
+    // Сохраняем оба промпта
+    const [textResult, imageResult] = await Promise.all([
+      updateSystemSetting(userId, "global_system_prompt", globalPrompt),
+      updateSystemSetting(userId, "global_image_prompt", globalImagePrompt),
+    ])
 
-    if (result.success) {
+    if (textResult.success && imageResult.success) {
       setSaveStatus("success")
     } else {
       setSaveStatus("error")
-      setErrorMessage(result.error || "Ошибка сохранения")
+      setErrorMessage(textResult.error || imageResult.error || "Ошибка сохранения")
     }
 
     setIsSaving(false)
@@ -166,11 +177,11 @@ export function SystemSettingsEditor() {
           {/* Пример итогового промпта */}
           <div className="p-3 sm:p-4 border border-muted rounded-lg space-y-3 bg-muted/20">
             <h3 className="text-base sm:text-lg font-semibold text-muted-foreground">
-              Пример итогового промпта
+              Пример итогового промпта (текст)
             </h3>
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                При генерации результата итоговый промпт будет выглядеть так:
+                При генерации текстового результата итоговый промпт будет выглядеть так:
               </p>
               <div className="bg-background p-3 rounded border text-xs font-mono whitespace-pre-wrap break-words">
                 <span className="text-accent">{globalPrompt || "(глобальный промпт не задан)"}</span>
@@ -179,6 +190,31 @@ export function SystemSettingsEditor() {
                 <br /><br />
                 <span className="text-foreground/70">(индивидуальный промпт формы)</span>
               </div>
+            </div>
+          </div>
+
+          {/* Глобальный промпт для изображений */}
+          <div className="p-3 sm:p-4 border border-purple-500/20 rounded-lg space-y-3 sm:space-y-4 bg-purple-500/5">
+            <h3 className="text-base sm:text-lg font-semibold text-purple-500">
+              Системный промпт для изображений (DALL-E)
+            </h3>
+
+            <div className="space-y-2">
+              <Label htmlFor="global_image_prompt" className="text-sm">
+                Инструкции для генерации промптов DALL-E
+              </Label>
+              <Textarea
+                id="global_image_prompt"
+                value={globalImagePrompt}
+                onChange={(e) => setGlobalImagePrompt(e.target.value)}
+                placeholder="Введите системный промпт для генерации изображений..."
+                rows={10}
+                className="font-mono text-xs sm:text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Этот промпт используется для генерации безопасных промптов DALL-E на основе контента пользователя.
+                GPT сначала создаёт промпт для DALL-E, следуя этим инструкциям.
+              </p>
             </div>
           </div>
         </div>

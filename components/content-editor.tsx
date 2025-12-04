@@ -106,10 +106,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
 
       setContent(contentMap)
       setLoadingMessages(messages.length > 0 ? messages : ["Analyzing...", "Processing...", "Almost done..."])
-      setSystemPrompt(
-        prompt ||
-          "You are an expert business consultant. Analyze the provided website and generate clear, actionable recommendations. Provide your response in plain text without any markdown formatting, asterisks, or special characters. Keep your tone professional and direct.",
-      )
+      setSystemPrompt(prompt || "") // Индивидуальный промпт формы (глобальный добавляется автоматически)
       setResultFormat(format)
     }
   }
@@ -206,17 +203,18 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
             <h3 className="text-base sm:text-lg font-semibold text-accent">Настройки AI</h3>
 
             <div className="space-y-2">
-              <Label htmlFor="system_prompt" className="text-sm">Системный промпт (OpenAI)</Label>
+              <Label htmlFor="system_prompt" className="text-sm">Системный промпт формы (OpenAI)</Label>
               <Textarea
                 id="system_prompt"
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder="Введите системный промпт для OpenAI..."
+                placeholder="Введите индивидуальный промпт для этой формы (необязательно)..."
                 rows={6}
                 className="font-mono text-xs sm:text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                Этот промпт инструктирует AI как анализировать сайты и генерировать рекомендации.
+                Индивидуальный промпт для этой формы. Глобальный системный промпт (если задан суперадмином) 
+                будет автоматически добавлен как префикс к этому промпту при генерации результатов.
               </p>
             </div>
 
