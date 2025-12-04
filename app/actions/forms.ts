@@ -10,11 +10,6 @@ import { createClient } from "@supabase/supabase-js"
 
 const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-// UID пользователей с неограниченным количеством форм (админы)
-const UNLIMITED_FORM_USERS = [
-  "6cb16c09-6a85-4079-9579-118168e95b06",
-]
-
 /**
  * Проверяет, может ли пользователь создать ещё форму
  */
@@ -27,7 +22,7 @@ export async function canCreateMoreForms(userId: string): Promise<{ canCreate: b
     .single()
 
   // Админы и суперадмины могут создавать неограниченно
-  const isUnlimited = user?.role === "admin" || user?.role === "superadmin" || UNLIMITED_FORM_USERS.includes(userId)
+  const isUnlimited = user?.role === "admin" || user?.role === "superadmin"
   
   if (isUnlimited) {
     const { count } = await supabaseAdmin
@@ -152,7 +147,7 @@ export async function deleteUserForm(userId: string, formId: string) {
     .eq("id", userId)
     .single()
 
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin" || UNLIMITED_FORM_USERS.includes(userId)
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin"
 
   const { data: form } = await supabaseAdmin
     .from("forms")
