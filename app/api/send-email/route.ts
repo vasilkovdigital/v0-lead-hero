@@ -5,8 +5,6 @@ import { marked } from "marked"
 marked.setOptions({
   breaks: true,
   gfm: true,
-  headerIds: false,
-  mangle: false,
 })
 
 // CORS заголовки для поддержки запросов с внешних сайтов
