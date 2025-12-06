@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { createUserForm, deleteUserForm, canCreateMoreForms } from "@/app/actions/forms"
+import { createUserForm, deleteUserForm, canCreateMoreForms, updateFormNotificationSetting } from "@/app/actions/forms"
+import { Switch } from "@/components/ui/switch"
 
 interface Form {
   id: string
@@ -27,6 +28,7 @@ interface Form {
   created_at: string
   owner_id: string
   actual_lead_count?: number // Реальное количество лидов из таблицы leads
+  notify_on_new_lead?: boolean // Настройка email уведомлений
 }
 
 interface FormLimitInfo {
@@ -55,6 +57,8 @@ export function FormsManager() {
   const [selectedForm, setSelectedForm] = useState<Form | null>(null)
   const [formName, setFormName] = useState("")
   const [newFormName, setNewFormName] = useState("")
+  const [notifyOnNewLead, setNotifyOnNewLead] = useState(true)
+  const [updatingNotification, setUpdatingNotification] = useState(false)
 
   const fetchUserForms = useCallback(async () => {
     const supabase = createClient()
@@ -190,7 +194,23 @@ export function FormsManager() {
   const openEditDialog = (form: Form) => {
     setSelectedForm(form)
     setFormName(form.name)
+    setNotifyOnNewLead(form.notify_on_new_lead ?? true)
     setShowEditDialog(true)
+  }
+
+  const handleNotificationToggle = async (checked: boolean) => {
+    if (!selectedForm || !userId) return
+
+    setUpdatingNotification(true)
+    const result = await updateFormNotificationSetting(userId, selectedForm.id, checked)
+
+    if (result.error) {
+      setError(result.error)
+    } else {
+      setNotifyOnNewLead(checked)
+      setForms(forms.map(f => f.id === selectedForm.id ? { ...f, notify_on_new_lead: checked } : f))
+    }
+    setUpdatingNotification(false)
   }
 
   const openEmbedDialog = (form: Form) => {
@@ -409,13 +429,30 @@ export function FormsManager() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Настройки формы</DialogTitle>
-            <DialogDescription className="text-sm">Измените название вашей формы</DialogDescription>
+            <DialogDescription className="text-sm">Настройте параметры вашей формы</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label htmlFor="formName">Название формы</Label>
               <Input id="formName" value={formName} onChange={(e) => setFormName(e.target.value)} className="mt-2 h-10 sm:h-11" />
             </div>
+            
+            {/* Настройка email уведомлений */}
+            <div className="flex items-center justify-between rounded-lg border p-3 sm:p-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="notify" className="text-sm font-medium">Email уведомления</Label>
+                <p className="text-xs text-muted-foreground">
+                  Получать письмо при новой заявке
+                </p>
+              </div>
+              <Switch
+                id="notify"
+                checked={notifyOnNewLead}
+                onCheckedChange={handleNotificationToggle}
+                disabled={updatingNotification}
+              />
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-2">
               <Button onClick={updateFormName} className="flex-1 h-10 sm:h-11">
                 Сохранить

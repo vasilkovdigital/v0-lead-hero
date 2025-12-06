@@ -3,6 +3,7 @@
  * - createUserForm: создание новой формы для пользователя
  * - deleteUserForm: удаление формы пользователя
  * - canCreateMoreForms: проверка лимита форм
+ * - updateFormNotificationSetting: обновление настройки уведомлений
  */
 "use server"
 
@@ -178,6 +179,39 @@ export async function deleteUserForm(userId: string, formId: string) {
   if (error) {
     console.error("Error deleting form:", error)
     return { error: "Ошибка удаления формы: " + error.message }
+  }
+
+  return { success: true }
+}
+
+/**
+ * Обновляет настройку email уведомлений для формы
+ */
+export async function updateFormNotificationSetting(userId: string, formId: string, notifyOnNewLead: boolean) {
+  // Проверяем что форма принадлежит пользователю
+  const { data: form } = await supabaseAdmin
+    .from("forms")
+    .select("owner_id")
+    .eq("id", formId)
+    .single()
+
+  if (!form) {
+    return { error: "Форма не найдена" }
+  }
+
+  if (form.owner_id !== userId) {
+    return { error: "Нет прав на изменение этой формы" }
+  }
+
+  // Обновляем настройку
+  const { error } = await supabaseAdmin
+    .from("forms")
+    .update({ notify_on_new_lead: notifyOnNewLead })
+    .eq("id", formId)
+
+  if (error) {
+    console.error("Error updating notification setting:", error)
+    return { error: "Ошибка обновления настройки: " + error.message }
   }
 
   return { success: true }
