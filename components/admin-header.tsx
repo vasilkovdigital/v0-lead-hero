@@ -21,7 +21,7 @@ export function AdminHeader({ isSuperAdmin = false }: AdminHeaderProps) {
   const headerText = isSuperAdmin ? "Lead Hero SuperAdmin" : "Lead Hero Admin"
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
+    <div className="w-full pt-1 sm:pt-2">
       <header className="bg-card border border-border rounded-xl shadow-sm">
         <div className="flex items-center justify-between p-3 sm:p-4">
           <h2 className="text-lg sm:text-xl font-semibold truncate">{headerText}</h2>
