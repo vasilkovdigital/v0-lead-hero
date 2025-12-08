@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
@@ -24,37 +25,60 @@ export function QuotaCounter({
   loading = false,
   className,
 }: QuotaCounterProps) {
+  // Локальное состояние для ввода
+  const [localValue, setLocalValue] = useState<string>(value.toString())
+
+  // Синхронизируем локальное состояние при изменении value извне
+  useEffect(() => {
+    setLocalValue(value.toString())
+  }, [value])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (disabled || loading) return
     
-    const inputValue = e.target.value
+    // Обновляем только локальное состояние при вводе
+    setLocalValue(e.target.value)
+  }
+
+  const commitValue = () => {
+    if (disabled || loading) return
+
+    const inputValue = localValue.trim()
     
-    // Разрешаем пустое поле для удобства редактирования
+    // Если поле пустое, устанавливаем min
     if (inputValue === '') {
-      onChange(min)
+      const finalValue = min
+      setLocalValue(finalValue.toString())
+      onChange(finalValue)
       return
     }
     
     const numValue = parseInt(inputValue, 10)
     
-    // Проверяем что это валидное число
-    if (isNaN(numValue)) return
+    // Если невалидное число, возвращаемся к исходному значению
+    if (isNaN(numValue)) {
+      setLocalValue(value.toString())
+      return
+    }
     
     // Применяем ограничения min/max
     let newValue = numValue
     if (newValue < min) newValue = min
     if (max !== undefined && newValue > max) newValue = max
     
+    // Обновляем локальное состояние и вызываем onChange
+    setLocalValue(newValue.toString())
     onChange(newValue)
   }
 
   const handleBlur = () => {
-    // При потере фокуса убеждаемся что значение валидно
-    if (value < min) {
-      onChange(min)
-    }
-    if (max !== undefined && value > max) {
-      onChange(max)
+    commitValue()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commitValue()
     }
   }
 
@@ -62,9 +86,10 @@ export function QuotaCounter({
     <div className={cn("flex items-center", className)}>
       <Input
         type="number"
-        value={value}
+        value={localValue}
         onChange={handleChange}
         onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         disabled={disabled || loading}
         min={min}
         max={max}
