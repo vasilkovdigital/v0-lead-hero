@@ -6,6 +6,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { deleteLead } from "@/app/actions/leads"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -138,12 +139,16 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
   const handleDelete = async (id: string) => {
     if (!confirm("Удалить этот лид?")) return
 
-    const supabase = createClient()
-    const { error } = await supabase.from("leads").delete().eq("id", id)
+    const result = await deleteLead(id)
 
-    if (!error) {
-      setLeads(leads.filter((lead) => lead.id !== id))
+    if ("error" in result) {
+      console.error("Ошибка удаления лида:", result.error)
+      alert("Не удалось удалить лид: " + result.error)
+      return
     }
+
+    // Удаляем лид из локального состояния
+    setLeads(leads.filter((lead) => lead.id !== id))
   }
 
   const handleExport = () => {

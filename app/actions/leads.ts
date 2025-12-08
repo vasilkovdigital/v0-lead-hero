@@ -357,3 +357,59 @@ export async function updateLeadWithEmail(
 ) {
   return createLead({ formId, email, url: "", resultText, resultImageUrl })
 }
+
+/**
+ * Удаляет лид и уменьшает счетчик лидов формы
+ * Уменьшает счетчик только если лид был реальным (не тестовым и не от владельца)
+ */
+export async function deleteLead(leadId: string): Promise<{ success: boolean } | { error: string }> {
+  // Получаем данные лида перед удалением
+  const { data: lead, error: leadError } = await supabaseAdmin
+    .from("leads")
+    .select("id, form_id, email")
+    .eq("id", leadId)
+    .single()
+
+  if (leadError || !lead) {
+    return { error: "Лид не найден" }
+  }
+
+  const isTestEmail = lead.email?.toLowerCase() === TEST_EMAIL.toLowerCase()
+
+  // Удаляем лид
+  const { error: deleteError } = await supabaseAdmin
+    .from("leads")
+    .delete()
+    .eq("id", leadId)
+
+  if (deleteError) {
+    return { error: "Ошибка при удалении лида" }
+  }
+
+  // Уменьшаем счетчик только если это был реальный лид (не тестовый email)
+  // Тестовые лиды не увеличивают счетчик при создании, поэтому не уменьшаем при удалении
+  if (!isTestEmail && lead.form_id) {
+    // Получаем текущее значение счетчика
+    const { data: form } = await supabaseAdmin
+      .from("forms")
+      .select("lead_count")
+      .eq("id", lead.form_id)
+      .single()
+
+    if (form) {
+      // Уменьшаем счетчик, но не ниже 0
+      const newCount = Math.max((form.lead_count || 0) - 1, 0)
+      const { error: updateError } = await supabaseAdmin
+        .from("forms")
+        .update({ lead_count: newCount })
+        .eq("id", lead.form_id)
+
+      if (updateError) {
+        console.error("Error decrementing lead count:", updateError)
+        // Не возвращаем ошибку, так как лид уже удален
+      }
+    }
+  }
+
+  return { success: true }
+}

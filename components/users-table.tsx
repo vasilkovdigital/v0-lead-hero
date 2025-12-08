@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { QuotaCounter } from "@/components/quota-counter"
+import { cn } from "@/lib/utils"
 
 interface UserWithStats {
   id: string
@@ -119,8 +120,7 @@ export function UsersTable() {
                 <TableHead className="min-w-[100px]">Роль</TableHead>
                 <TableHead className="min-w-[80px] text-center">Формы</TableHead>
                 <TableHead className="min-w-[150px] text-center">Лимит форм</TableHead>
-                <TableHead className="min-w-[80px] text-center">Лиды</TableHead>
-                <TableHead className="min-w-[150px] text-center">Лимит лидов</TableHead>
+                <TableHead className="min-w-[180px] text-center">Использование лидов</TableHead>
                 <TableHead className="min-w-[100px] text-center">Публикация</TableHead>
                 <TableHead className="min-w-[120px]">Регистрация</TableHead>
               </TableRow>
@@ -128,7 +128,7 @@ export function UsersTable() {
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Пользователей пока нет
                   </TableCell>
                 </TableRow>
@@ -168,14 +168,25 @@ export function UsersTable() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs sm:text-sm text-center tabular-nums">
-                        {user.lead_count}
-                      </TableCell>
                       <TableCell className="text-center">
                         {isSuperAdmin ? (
-                          <div className="text-center text-muted-foreground text-sm">∞</div>
+                          <div className="text-xs sm:text-sm tabular-nums text-muted-foreground">
+                            {user.lead_count} (∞)
+                          </div>
                         ) : (
-                          <div className="flex justify-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <span
+                              className={cn(
+                                "text-xs sm:text-sm tabular-nums font-medium",
+                                user.max_leads !== null && user.lead_count >= user.max_leads * 0.9
+                                  ? "text-destructive"
+                                  : user.max_leads !== null && user.lead_count >= user.max_leads * 0.7
+                                  ? "text-yellow-500"
+                                  : ""
+                              )}
+                            >
+                              {user.lead_count} / {user.max_leads ?? 0}
+                            </span>
                             <QuotaCounter
                               value={user.max_leads ?? 0}
                               onChange={(value) => handleQuotaUpdate(user.id, "max_leads", value)}
@@ -183,6 +194,7 @@ export function UsersTable() {
                               step={10}
                               disabled={isSuperAdmin}
                               loading={isUpdating}
+                              className="ml-2"
                             />
                           </div>
                         )}
