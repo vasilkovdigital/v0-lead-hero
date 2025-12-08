@@ -90,19 +90,6 @@ function generateEmailHTML(resultText: string, resultImageUrl: string | null, re
                 </tr>
                 
                 ${
-                  url
-                    ? `
-                <tr>
-                  <td style="padding: 20px 40px; text-align: center;">
-                    <p style="margin: 0; color: #a3a3a3; font-size: 14px;">Analyzed URL:</p>
-                    <p style="margin: 8px 0 0 0; color: #ffffff; font-size: 16px; font-weight: 500; word-break: break-all;">${url}</p>
-                  </td>
-                </tr>
-                `
-                    : ""
-                }
-                
-                ${
                   resultType === "image" && resultImageUrl
                     ? `
                 <tr>
@@ -120,7 +107,6 @@ function generateEmailHTML(resultText: string, resultImageUrl: string | null, re
                 <tr>
                   <td style="padding: 40px 40px 20px 40px;">
                     <div style="margin-bottom: 20px; padding: 20px; background-color: #262626; border-radius: 4px;">
-                      <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #ffffff;">Your Recommendations</h3>
                       <div style="margin: 0; color: #d4d4d4; font-size: 15px; line-height: 1.8;">${htmlContent}</div>
                     </div>
                   </td>
