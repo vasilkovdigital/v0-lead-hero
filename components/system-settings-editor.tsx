@@ -2,66 +2,37 @@
  * SystemSettingsEditor - Редактор системных настроек
  * Доступен только для суперадминов
  * Позволяет настраивать глобальные промпты: для текста и для изображений
+ * 
+ * Использует React Query для кэширования данных
  */
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Save, Settings, AlertCircle, CheckCircle2 } from "lucide-react"
-import { getSystemSetting, updateSystemSetting } from "@/app/actions/system-settings"
+import { useSystemSettings, useSaveSystemSettings } from "@/lib/hooks"
 
 export function SystemSettingsEditor() {
-  const [userId, setUserId] = useState<string>("")
+  // React Query хуки
+  const { data, isLoading, error: queryError } = useSystemSettings()
+  const saveSettingsMutation = useSaveSystemSettings()
+
+  // Локальное состояние для редактирования
   const [globalTextPrompt, setGlobalTextPrompt] = useState<string>("")
   const [globalImagePrompt, setGlobalImagePrompt] = useState<string>("")
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle")
-  const [errorMessage, setErrorMessage] = useState<string>("")
 
-  const fetchSettings = useCallback(async () => {
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      setIsLoading(false)
-      return
-    }
-
-    setUserId(user.id)
-
-    // Загружаем глобальный промпт для текста
-    const { value: textValue, error: textError } = await getSystemSetting("global_text_prompt")
-    
-    if (textError) {
-      setErrorMessage(textError)
-      setSaveStatus("error")
-    } else if (textValue) {
-      setGlobalTextPrompt(textValue)
-    }
-
-    // Загружаем глобальный промпт для изображений
-    const { value: imageValue, error: imageError } = await getSystemSetting("global_image_prompt")
-    if (imageError) {
-      setErrorMessage(imageError)
-      setSaveStatus("error")
-    } else if (imageValue) {
-      setGlobalImagePrompt(imageValue)
-    }
-
-    setIsLoading(false)
-  }, [])
-
+  // Синхронизируем локальное состояние с данными из кэша
   useEffect(() => {
-    fetchSettings()
-  }, [fetchSettings])
+    if (data) {
+      setGlobalTextPrompt(data.globalTextPrompt)
+      setGlobalImagePrompt(data.globalImagePrompt)
+    }
+  }, [data])
 
   // Сбрасываем статус через 3 секунды
   useEffect(() => {
@@ -72,30 +43,33 @@ export function SystemSettingsEditor() {
   }, [saveStatus])
 
   const handleSave = async () => {
-    if (!userId) return
-
-    setIsSaving(true)
     setSaveStatus("idle")
-    setErrorMessage("")
 
-    // Сохраняем оба промпта
-    const [textResult, imageResult] = await Promise.all([
-      updateSystemSetting(userId, "global_text_prompt", globalTextPrompt),
-      updateSystemSetting(userId, "global_image_prompt", globalImagePrompt),
-    ])
-
-    if (textResult.success && imageResult.success) {
+    try {
+      await saveSettingsMutation.mutateAsync({
+        globalTextPrompt,
+        globalImagePrompt,
+      })
       setSaveStatus("success")
-    } else {
+    } catch (err) {
       setSaveStatus("error")
-      setErrorMessage(textResult.error || imageResult.error || "Ошибка сохранения")
     }
-
-    setIsSaving(false)
   }
 
   if (isLoading) {
     return <div className="text-center py-8">Загрузка настроек...</div>
+  }
+
+  if (queryError) {
+    return (
+      <Card className="p-4 sm:p-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Ошибка загрузки</AlertTitle>
+          <AlertDescription>{queryError.message}</AlertDescription>
+        </Alert>
+      </Card>
+    )
   }
 
   return (
@@ -113,11 +87,11 @@ export function SystemSettingsEditor() {
           </div>
           <Button 
             onClick={handleSave} 
-            disabled={isSaving} 
+            disabled={saveSettingsMutation.isPending} 
             className="min-w-[140px] w-full sm:w-auto h-10 sm:h-11"
           >
             <Save className="mr-2 h-4 w-4" />
-            {isSaving ? "Сохранение..." : "Сохранить"}
+            {saveSettingsMutation.isPending ? "Сохранение..." : "Сохранить"}
           </Button>
         </div>
 
@@ -132,11 +106,13 @@ export function SystemSettingsEditor() {
           </Alert>
         )}
 
-        {saveStatus === "error" && (
+        {(saveStatus === "error" || saveSettingsMutation.error) && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Ошибка</AlertTitle>
-            <AlertDescription>{errorMessage}</AlertDescription>
+            <AlertDescription>
+              {saveSettingsMutation.error?.message || "Ошибка сохранения"}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -195,4 +171,3 @@ export function SystemSettingsEditor() {
     </Card>
   )
 }
-

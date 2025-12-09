@@ -3,17 +3,18 @@
  * Позволяет настраивать тексты, AI-промпты и другие параметры формы
  * Поддерживает выбор формы для редактирования если у пользователя несколько форм
  * Для суперадмина также доступна главная форма
+ * 
+ * Использует React Query для кэширования данных
  */
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
-import { Save, Settings } from "lucide-react"
+import { Save, Settings, AlertCircle } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -22,163 +23,65 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-
-// ID главной формы
-const MAIN_FORM_ID = "f5fad560-eea2-443c-98e9-1a66447dae86"
-
-interface ContentItem {
-  id: string
-  key: string
-  value: string
-}
-
-interface Form {
-  id: string
-  name: string
-  isMain?: boolean
-}
+import { useEditorForms, useFormContent, useSaveFormContent } from "@/lib/hooks"
 
 interface ContentEditorProps {
   formId?: string
 }
 
 export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
-  const [forms, setForms] = useState<Form[]>([])
+  // React Query хуки
+  const { data: formsData, isLoading: formsLoading } = useEditorForms()
+  const saveContentMutation = useSaveFormContent()
+
+  // Локальное состояние
   const [selectedFormId, setSelectedFormId] = useState<string | null>(propFormId || null)
   const [content, setContent] = useState<Record<string, string>>({})
-  const [loadingMessages, setLoadingMessages] = useState<string[]>([])
+  const [loadingMessages, setLoadingMessages] = useState<string[]>(["", "", ""])
   const [systemPrompt, setSystemPrompt] = useState<string>("")
   const [resultFormat, setResultFormat] = useState<string>("text")
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
 
-  const fetchForms = useCallback(async () => {
-    if (propFormId) {
-      setSelectedFormId(propFormId)
-      await fetchContent(propFormId)
-      setIsLoading(false)
-      return
-    }
+  const forms = formsData?.forms || []
 
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-    // Проверяем роль пользователя
-    const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single()
-    const isSuperAdmin = userData?.role === "superadmin"
-
-    // Загружаем все формы пользователя
-    const { data: userForms } = await supabase
-      .from("forms")
-      .select("id, name")
-      .eq("owner_id", user.id)
-      .order("created_at", { ascending: false })
-
-    let allForms: Form[] = userForms || []
-
-    // Для суперадмина добавляем главную форму, если её ещё нет в списке
-    if (isSuperAdmin) {
-      const hasMainForm = allForms.some(f => f.id === MAIN_FORM_ID)
-      if (!hasMainForm) {
-        // Загружаем информацию о главной форме
-        const { data: mainForm } = await supabase
-          .from("forms")
-          .select("id, name")
-          .eq("id", MAIN_FORM_ID)
-          .single()
-        
-        if (mainForm) {
-          allForms = [{ ...mainForm, isMain: true }, ...allForms]
-        }
-      } else {
-        // Помечаем главную форму, если она уже есть в списке
-        allForms = allForms.map(f => f.id === MAIN_FORM_ID ? { ...f, isMain: true } : f)
-      }
-    }
-
-    if (allForms.length > 0) {
-      setForms(allForms)
-      // Выбираем первую форму по умолчанию
-      setSelectedFormId(allForms[0].id)
-      await fetchContent(allForms[0].id)
-    }
-    
-    setIsLoading(false)
-  }, [propFormId])
-
+  // Устанавливаем первую форму по умолчанию
   useEffect(() => {
-    fetchForms()
-  }, [fetchForms])
-
-  const fetchContent = async (fId: string) => {
-    const supabase = createClient()
-    const { data, error } = await supabase.from("form_content").select("*").eq("form_id", fId)
-
-    if (!error && data) {
-      const contentMap: Record<string, string> = {}
-      const messages: string[] = []
-      let prompt = ""
-      let format = "text"
-
-      data.forEach((item: ContentItem) => {
-        if (item.key.startsWith("loading_message_")) {
-          messages.push(item.value)
-        } else if (item.key === "ai_system_prompt") {
-          prompt = item.value
-        } else if (item.key === "ai_result_format") {
-          format = item.value
-        } else {
-          contentMap[item.key] = item.value
-        }
-      })
-
-      setContent(contentMap)
-      setLoadingMessages(messages.length > 0 ? messages : ["Analyzing...", "Processing...", "Almost done..."])
-      setSystemPrompt(prompt || "") // Индивидуальный промпт формы (глобальный добавляется автоматически)
-      setResultFormat(format)
+    if (!propFormId && forms.length > 0 && !selectedFormId) {
+      setSelectedFormId(forms[0].id)
     }
-  }
+  }, [forms, propFormId, selectedFormId])
 
-  const handleFormChange = async (formId: string) => {
+  // Загружаем контент выбранной формы
+  const { data: contentData, isLoading: contentLoading } = useFormContent(selectedFormId)
+
+  // Обновляем локальное состояние когда загружаем контент
+  useEffect(() => {
+    if (contentData) {
+      setContent(contentData.content)
+      setLoadingMessages(contentData.loadingMessages)
+      setSystemPrompt(contentData.systemPrompt)
+      setResultFormat(contentData.resultFormat)
+    }
+  }, [contentData])
+
+  const handleFormChange = (formId: string) => {
     setSelectedFormId(formId)
-    setIsLoading(true)
-    await fetchContent(formId)
-    setIsLoading(false)
   }
 
   const handleSave = async () => {
     if (!selectedFormId) return
 
-    setIsSaving(true)
-    const supabase = createClient()
-
-    for (const [key, value] of Object.entries(content)) {
-      await supabase.from("form_content").upsert({ form_id: selectedFormId, key, value }, { onConflict: "form_id,key" })
+    try {
+      await saveContentMutation.mutateAsync({
+        formId: selectedFormId,
+        content,
+        loadingMessages,
+        systemPrompt,
+        resultFormat,
+      })
+      toast.success("Контент сохранён!")
+    } catch (err) {
+      toast.error("Ошибка сохранения: " + (err instanceof Error ? err.message : "Неизвестная ошибка"))
     }
-
-    for (let i = 0; i < loadingMessages.length; i++) {
-      await supabase
-        .from("form_content")
-        .upsert(
-          { form_id: selectedFormId, key: `loading_message_${i + 1}`, value: loadingMessages[i] },
-          { onConflict: "form_id,key" },
-        )
-    }
-
-    await supabase
-      .from("form_content")
-      .upsert({ form_id: selectedFormId, key: "ai_system_prompt", value: systemPrompt }, { onConflict: "form_id,key" })
-
-    await supabase
-      .from("form_content")
-      .upsert({ form_id: selectedFormId, key: "ai_result_format", value: resultFormat }, { onConflict: "form_id,key" })
-
-    setIsSaving(false)
-    toast.success("Контент сохранён!")
   }
 
   const handleLoadingMessageChange = (index: number, value: string) => {
@@ -187,12 +90,22 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
     setLoadingMessages(newMessages)
   }
 
-  if (isLoading) {
+  const isLoading = formsLoading || contentLoading
+
+  if (isLoading && !contentData) {
     return <div className="text-center py-8">Загрузка контента...</div>
   }
 
-  if (!selectedFormId) {
-    return <div className="text-center py-8">Форма не найдена. Сначала создайте форму.</div>
+  if (!selectedFormId && forms.length === 0 && !formsLoading) {
+    return (
+      <Card className="p-4 sm:p-6">
+        <div className="flex flex-col items-center justify-center py-8">
+          <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+          <p className="text-lg font-medium mb-2">Форма не найдена</p>
+          <p className="text-sm text-muted-foreground">Сначала создайте форму.</p>
+        </div>
+      </Card>
+    )
   }
 
   return (
@@ -222,9 +135,13 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
                 </Select>
               </div>
             )}
-            <Button onClick={handleSave} disabled={isSaving} className="min-w-[140px] w-full sm:w-auto h-10 sm:h-11">
+            <Button 
+              onClick={handleSave} 
+              disabled={saveContentMutation.isPending || contentLoading} 
+              className="min-w-[140px] w-full sm:w-auto h-10 sm:h-11"
+            >
               <Save className="mr-2 h-4 w-4" />
-              {isSaving ? "Сохранение..." : "Сохранить"}
+              {saveContentMutation.isPending ? "Сохранение..." : "Сохранить"}
             </Button>
           </div>
         </div>
@@ -417,7 +334,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="share_button" className="text-sm">Текст кнопки "Поделиться"</Label>
+            <Label htmlFor="share_button" className="text-sm">Текст кнопки &quot;Поделиться&quot;</Label>
             <Input
               id="share_button"
               value={content.share_button || ""}
@@ -427,7 +344,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="download_button" className="text-sm">Текст кнопки "Скачать"</Label>
+            <Label htmlFor="download_button" className="text-sm">Текст кнопки &quot;Скачать&quot;</Label>
             <Input
               id="download_button"
               value={content.download_button || ""}

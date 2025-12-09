@@ -2,11 +2,12 @@
  * FormsManager - Компонент управления формами пользователя
  * Поддерживает создание множества форм для админов, удаление форм,
  * настройку и встраивание форм на сайты
+ * 
+ * Использует React Query для кэширования данных
  */
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -15,10 +16,17 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { createUserForm, deleteUserForm, canCreateMoreForms, updateFormNotificationSetting } from "@/app/actions/forms"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
+import {
+  useUserForms,
+  useCreateForm,
+  useDeleteForm,
+  useUpdateFormName,
+  useToggleFormActive,
+  useUpdateFormNotification,
+} from "@/lib/hooks"
 
 interface Form {
   id: string
@@ -28,26 +36,21 @@ interface Form {
   lead_limit: number
   created_at: string
   owner_id: string
-  actual_lead_count?: number // Реальное количество лидов из таблицы leads
-  notify_on_new_lead?: boolean // Настройка email уведомлений
-}
-
-interface FormLimitInfo {
-  canCreate: boolean
-  currentCount: number
-  limit: number | null
+  actual_lead_count?: number
+  notify_on_new_lead?: boolean
 }
 
 export function FormsManager() {
-  const [forms, setForms] = useState<Form[]>([])
-  const [userId, setUserId] = useState<string>("")
-  const [userEmail, setUserEmail] = useState<string>("")
-  const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [deleting, setDeleting] = useState<string | null>(null)
+  // React Query хуки
+  const { data, isLoading, error: queryError } = useUserForms()
+  const createFormMutation = useCreateForm()
+  const deleteFormMutation = useDeleteForm()
+  const updateNameMutation = useUpdateFormName()
+  const toggleActiveMutation = useToggleFormActive()
+  const updateNotificationMutation = useUpdateFormNotification()
+
+  // Локальное состояние для UI
   const [error, setError] = useState<string | null>(null)
-  const [limitInfo, setLimitInfo] = useState<FormLimitInfo | null>(null)
-  const [totalLeads, setTotalLeads] = useState<number>(0)
   
   // Диалоги
   const [showEmbedDialog, setShowEmbedDialog] = useState(false)
@@ -60,141 +63,59 @@ export function FormsManager() {
   const [formName, setFormName] = useState("")
   const [newFormName, setNewFormName] = useState("")
   const [notifyOnNewLead, setNotifyOnNewLead] = useState(true)
-  const [updatingNotification, setUpdatingNotification] = useState(false)
 
-  const fetchUserForms = useCallback(async () => {
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const forms = data?.forms || []
+  const totalLeads = data?.totalLeads || 0
+  const limitInfo = data?.limitInfo || null
 
-    if (user) {
-      setUserId(user.id)
-      setUserEmail(user.email || "")
-
-      // Загружаем все формы пользователя
-      const { data: userForms } = await supabase
-        .from("forms")
-        .select("*")
-        .eq("owner_id", user.id)
-        .order("created_at", { ascending: false })
-
-      if (userForms) {
-        // Для каждой формы получаем реальное количество лидов
-        const formsWithLeadCount = await Promise.all(
-          userForms.map(async (form) => {
-            const { count } = await supabase
-              .from("leads")
-              .select("*", { count: "exact", head: true })
-              .eq("form_id", form.id)
-            
-            return {
-              ...form,
-              actual_lead_count: count || 0,
-            }
-          })
-        )
-        
-        setForms(formsWithLeadCount)
-
-        // Получаем общее количество лидов для всех форм пользователя
-        const formIds = userForms.map(f => f.id)
-        if (formIds.length > 0) {
-          const { count: totalCount } = await supabase
-            .from("leads")
-            .select("*", { count: "exact", head: true })
-            .in("form_id", formIds)
-          
-          setTotalLeads(totalCount || 0)
-        } else {
-          setTotalLeads(0)
-        }
-      }
-
-      // Проверяем лимит форм
-      const info = await canCreateMoreForms(user.id)
-      setLimitInfo(info)
-    }
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    fetchUserForms()
-  }, [fetchUserForms])
+  // Показываем загрузку, если данные еще не загрузились
+  if (isLoading || !data) {
+    return <div className="text-center py-12">Загрузка...</div>
+  }
 
   const createForm = async () => {
-    if (!userId || !userEmail) return
-
-    setCreating(true)
     setError(null)
-
-    const result = await createUserForm(userId, userEmail, newFormName || undefined)
-
-    if (result.error) {
-      setError(result.error)
-      setCreating(false)
-      return
-    }
-
-    if (result.form) {
-      // Добавляем реальное количество лидов (для новой формы всегда 0)
-      const formWithLeadCount = {
-        ...result.form,
-        actual_lead_count: 0,
-      }
-      setForms([formWithLeadCount, ...forms])
+    try {
+      await createFormMutation.mutateAsync(newFormName || undefined)
       setNewFormName("")
       setShowCreateDialog(false)
-      
-      // Обновляем лимит
-      const info = await canCreateMoreForms(userId)
-      setLimitInfo(info)
+      toast.success("Форма создана!")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка создания формы")
     }
-    setCreating(false)
   }
 
   const handleDeleteForm = async () => {
-    if (!selectedForm || !userId) return
-
-    setDeleting(selectedForm.id)
-    const result = await deleteUserForm(userId, selectedForm.id)
-
-    if (result.error) {
-      setError(result.error)
-      setDeleting(null)
-      return
-    }
-
-    // Вычитаем количество лидов удаленной формы из общего счетчика
-    const deletedFormLeads = selectedForm.actual_lead_count || 0
-    setTotalLeads(prev => Math.max(0, prev - deletedFormLeads))
-    
-    setForms(forms.filter(f => f.id !== selectedForm.id))
-    setShowDeleteDialog(false)
-    setSelectedForm(null)
-    setDeleting(null)
-
-    // Обновляем лимит
-    const info = await canCreateMoreForms(userId)
-    setLimitInfo(info)
-  }
-
-  const updateFormName = async () => {
     if (!selectedForm) return
 
-    const supabase = createClient()
-    const { error } = await supabase.from("forms").update({ name: formName }).eq("id", selectedForm.id)
+    try {
+      await deleteFormMutation.mutateAsync(selectedForm.id)
+      setShowDeleteDialog(false)
+      setSelectedForm(null)
+      toast.success("Форма удалена!")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка удаления формы")
+    }
+  }
 
-    if (!error) {
-      setForms(forms.map(f => f.id === selectedForm.id ? { ...f, name: formName } : f))
+  const updateFormNameHandler = async () => {
+    if (!selectedForm) return
+
+    try {
+      await updateNameMutation.mutateAsync({ formId: selectedForm.id, name: formName })
       setShowEditDialog(false)
+      toast.success("Имя формы обновлено!")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка обновления имени")
     }
   }
 
   const toggleFormActive = async (form: Form) => {
-    const supabase = createClient()
-    await supabase.from("forms").update({ is_active: !form.is_active }).eq("id", form.id)
-    setForms(forms.map(f => f.id === form.id ? { ...f, is_active: !f.is_active } : f))
+    try {
+      await toggleActiveMutation.mutateAsync({ formId: form.id, isActive: form.is_active })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка изменения статуса")
+    }
   }
 
   const copyFormLink = (form: Form) => {
@@ -218,18 +139,14 @@ export function FormsManager() {
   }
 
   const handleNotificationToggle = async (checked: boolean) => {
-    if (!selectedForm || !userId) return
+    if (!selectedForm) return
 
-    setUpdatingNotification(true)
-    const result = await updateFormNotificationSetting(userId, selectedForm.id, checked)
-
-    if (result.error) {
-      setError(result.error)
-    } else {
+    try {
+      await updateNotificationMutation.mutateAsync({ formId: selectedForm.id, notify: checked })
       setNotifyOnNewLead(checked)
-      setForms(forms.map(f => f.id === selectedForm.id ? { ...f, notify_on_new_lead: checked } : f))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка обновления настройки")
     }
-    setUpdatingNotification(false)
   }
 
   const openEmbedDialog = (form: Form) => {
@@ -242,8 +159,16 @@ export function FormsManager() {
     setShowDeleteDialog(true)
   }
 
-  if (loading) {
-    return <div className="text-center py-12">Загрузка...</div>
+  if (queryError) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+          <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
+          <p className="text-sm text-muted-foreground">{queryError.message}</p>
+        </CardContent>
+      </Card>
+    )
   }
 
   // Нет форм - показываем приглашение создать
@@ -260,7 +185,7 @@ export function FormsManager() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <Button onClick={() => setShowCreateDialog(true)} disabled={creating}>
+          <Button onClick={() => setShowCreateDialog(true)} disabled={createFormMutation.isPending}>
             <Plus className="mr-2 h-4 w-4" />
             Создать форму
           </Button>
@@ -272,7 +197,7 @@ export function FormsManager() {
             newFormName={newFormName}
             setNewFormName={setNewFormName}
             onCreate={createForm}
-            creating={creating}
+            creating={createFormMutation.isPending}
           />
         </CardContent>
       </Card>
@@ -359,6 +284,7 @@ export function FormsManager() {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => toggleFormActive(form)}
+                    disabled={toggleActiveMutation.isPending}
                     className="text-xs sm:text-sm h-8 sm:h-9"
                   >
                     {form.is_active ? "Выкл" : "Вкл"}
@@ -389,7 +315,7 @@ export function FormsManager() {
         newFormName={newFormName}
         setNewFormName={setNewFormName}
         onCreate={createForm}
-        creating={creating}
+        creating={createFormMutation.isPending}
       />
 
       {/* Диалог встраивания */}
@@ -444,13 +370,13 @@ export function FormsManager() {
                 id="notify"
                 checked={notifyOnNewLead}
                 onCheckedChange={handleNotificationToggle}
-                disabled={updatingNotification}
+                disabled={updateNotificationMutation.isPending}
               />
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
-              <Button onClick={updateFormName} className="flex-1 h-10 sm:h-11">
-                Сохранить
+              <Button onClick={updateFormNameHandler} disabled={updateNameMutation.isPending} className="flex-1 h-10 sm:h-11">
+                {updateNameMutation.isPending ? "Сохранение..." : "Сохранить"}
               </Button>
               <Button variant="outline" onClick={() => setShowEditDialog(false)} className="h-10 sm:h-11">
                 Отмена
@@ -476,10 +402,10 @@ export function FormsManager() {
             <Button 
               variant="destructive" 
               onClick={handleDeleteForm}
-              disabled={deleting === selectedForm?.id}
+              disabled={deleteFormMutation.isPending}
               className="w-full sm:w-auto h-10 sm:h-11"
             >
-              {deleting === selectedForm?.id ? (
+              {deleteFormMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Удаление...

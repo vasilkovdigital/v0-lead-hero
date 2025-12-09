@@ -1,0 +1,201 @@
+"use client"
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { createClient } from "@/lib/supabase/client"
+import { createUserForm, deleteUserForm, canCreateMoreForms, updateFormNotificationSetting } from "@/app/actions/forms"
+import { useCurrentUser } from "./use-auth"
+
+interface Form {
+  id: string
+  name: string
+  is_active: boolean
+  lead_count: number
+  lead_limit: number
+  created_at: string
+  owner_id: string
+  actual_lead_count?: number
+  notify_on_new_lead?: boolean
+}
+
+interface FormLimitInfo {
+  canCreate: boolean
+  currentCount: number
+  limit: number | null
+  canPublish: boolean
+}
+
+interface UserFormsData {
+  forms: Form[]
+  totalLeads: number
+  limitInfo: FormLimitInfo | null
+}
+
+/**
+ * Загрузка форм пользователя с подсчетом лидов
+ */
+async function fetchUserForms(userId: string): Promise<UserFormsData> {
+  const supabase = createClient()
+
+  // Загружаем все формы пользователя
+  const { data: userForms } = await supabase
+    .from("forms")
+    .select("*")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: false })
+
+  if (!userForms || userForms.length === 0) {
+    const limitInfo = await canCreateMoreForms(userId)
+    return { forms: [], totalLeads: 0, limitInfo }
+  }
+
+  // Для каждой формы получаем реальное количество лидов
+  const formsWithLeadCount = await Promise.all(
+    userForms.map(async (form) => {
+      const { count } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("form_id", form.id)
+      
+      return {
+        ...form,
+        actual_lead_count: count || 0,
+      }
+    })
+  )
+
+  // Получаем общее количество лидов для всех форм пользователя
+  const formIds = userForms.map(f => f.id)
+  const { count: totalCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .in("form_id", formIds)
+
+  // Проверяем лимит форм
+  const limitInfo = await canCreateMoreForms(userId)
+
+  return {
+    forms: formsWithLeadCount,
+    totalLeads: totalCount || 0,
+    limitInfo,
+  }
+}
+
+/**
+ * Хук для получения форм текущего пользователя
+ */
+export function useUserForms() {
+  const { data: user } = useCurrentUser()
+
+  return useQuery({
+    queryKey: ["forms", user?.id],
+    queryFn: () => fetchUserForms(user!.id),
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000, // 5 минут
+  })
+}
+
+/**
+ * Хук для создания новой формы
+ */
+export function useCreateForm() {
+  const queryClient = useQueryClient()
+  const { data: user } = useCurrentUser()
+
+  return useMutation({
+    mutationFn: async (formName?: string) => {
+      if (!user) throw new Error("Пользователь не авторизован")
+      const result = await createUserForm(user.id, user.email, formName)
+      if (result.error) throw new Error(result.error)
+      return result.form
+    },
+    onSuccess: () => {
+      // Инвалидируем кэш форм
+      queryClient.invalidateQueries({ queryKey: ["forms"] })
+    },
+  })
+}
+
+/**
+ * Хук для удаления формы
+ */
+export function useDeleteForm() {
+  const queryClient = useQueryClient()
+  const { data: user } = useCurrentUser()
+
+  return useMutation({
+    mutationFn: async (formId: string) => {
+      if (!user) throw new Error("Пользователь не авторизован")
+      const result = await deleteUserForm(user.id, formId)
+      if (result.error) throw new Error(result.error)
+      return result
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forms"] })
+    },
+  })
+}
+
+/**
+ * Хук для обновления имени формы
+ */
+export function useUpdateFormName() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ formId, name }: { formId: string; name: string }) => {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("forms")
+        .update({ name })
+        .eq("id", formId)
+      
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forms"] })
+    },
+  })
+}
+
+/**
+ * Хук для переключения активности формы
+ */
+export function useToggleFormActive() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ formId, isActive }: { formId: string; isActive: boolean }) => {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("forms")
+        .update({ is_active: !isActive })
+        .eq("id", formId)
+      
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forms"] })
+    },
+  })
+}
+
+/**
+ * Хук для обновления настройки уведомлений формы
+ */
+export function useUpdateFormNotification() {
+  const queryClient = useQueryClient()
+  const { data: user } = useCurrentUser()
+
+  return useMutation({
+    mutationFn: async ({ formId, notify }: { formId: string; notify: boolean }) => {
+      if (!user) throw new Error("Пользователь не авторизован")
+      const result = await updateFormNotificationSetting(user.id, formId, notify)
+      if (result.error) throw new Error(result.error)
+      return result
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forms"] })
+    },
+  })
+}
+

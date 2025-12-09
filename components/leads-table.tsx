@@ -1,16 +1,16 @@
 /**
  * LeadsTable - Компонент для отображения и управления лидами
  * Поддерживает просмотр лидов по всем формам пользователя с фильтрацией
+ * 
+ * Использует React Query для кэширования данных
  */
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
-import { deleteLead } from "@/app/actions/leads"
+import { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, Download, Filter } from "lucide-react"
+import { Trash2, Download, Filter, AlertCircle } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
   Select,
@@ -21,123 +21,23 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { useConfirm } from "@/components/ui/confirm-dialog"
-
-interface Lead {
-  id: string
-  url: string
-  email: string
-  result_text: string | null
-  result_image_url: string | null
-  status: string
-  created_at: string
-  form_id: string | null
-}
-
-interface Form {
-  id: string
-  name: string
-}
+import { useLeads, useDeleteLead } from "@/lib/hooks"
 
 interface LeadsTableProps {
   formId?: string
 }
 
 export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
-  const [leads, setLeads] = useState<Lead[]>([])
-  const [forms, setForms] = useState<Form[]>([])
   const [selectedFormId, setSelectedFormId] = useState<string | "all">("all")
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const { confirm, ConfirmDialog } = useConfirm()
+  
+  // React Query хуки
+  const { data, isLoading, error } = useLeads(propFormId)
+  const deleteLeadMutation = useDeleteLead()
 
-  const fetchFormsAndLeads = useCallback(async () => {
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-    // Проверяем роль пользователя
-    const { data: userData } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", user.id)
-      .single()
-
-    const userRole = userData?.role || "user"
-    const isSuperAdminUser = userRole === "superadmin"
-    setIsSuperAdmin(isSuperAdminUser)
-
-    // Если superadmin, показываем все лиды и все формы
-    if (isSuperAdminUser) {
-      // Загружаем все формы для фильтрации
-      const { data: allForms } = await supabase
-        .from("forms")
-        .select("id, name")
-        .order("created_at", { ascending: false })
-
-      if (allForms) {
-        setForms(allForms)
-      }
-
-      // Загружаем все лиды
-      const { data: allLeads, error } = await supabase
-        .from("leads")
-        .select("*")
-        .order("created_at", { ascending: false })
-
-      if (!error && allLeads) {
-        setLeads(allLeads)
-      }
-      setIsLoading(false)
-      return
-    }
-
-    // Если передан конкретный formId, показываем только его лиды
-    if (propFormId) {
-      const { data, error } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("form_id", propFormId)
-        .order("created_at", { ascending: false })
-
-      if (!error && data) {
-        setLeads(data)
-      }
-      setIsLoading(false)
-      return
-    }
-
-    // Загружаем все формы пользователя
-    const { data: userForms } = await supabase
-      .from("forms")
-      .select("id, name")
-      .eq("owner_id", user.id)
-      .order("created_at", { ascending: false })
-
-    if (userForms && userForms.length > 0) {
-      setForms(userForms)
-      
-      // Загружаем лиды по всем формам пользователя
-      const formIds = userForms.map(f => f.id)
-      const { data: leadsData, error } = await supabase
-        .from("leads")
-        .select("*")
-        .in("form_id", formIds)
-        .order("created_at", { ascending: false })
-
-      if (!error && leadsData) {
-        setLeads(leadsData)
-      }
-    }
-    
-    setIsLoading(false)
-  }, [propFormId])
-
-  useEffect(() => {
-    fetchFormsAndLeads()
-  }, [fetchFormsAndLeads])
+  const leads = data?.leads || []
+  const forms = data?.forms || []
+  const isSuperAdmin = data?.isSuperAdmin || false
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirm({
@@ -150,17 +50,13 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
 
     if (!confirmed) return
 
-    const result = await deleteLead(id)
-
-    if ("error" in result) {
-      console.error("Ошибка удаления лида:", result.error)
-      toast.error("Не удалось удалить лид: " + result.error)
-      return
+    try {
+      await deleteLeadMutation.mutateAsync(id)
+      toast.success("Лид успешно удалён")
+    } catch (err) {
+      console.error("Ошибка удаления лида:", err)
+      toast.error("Не удалось удалить лид: " + (err instanceof Error ? err.message : "Неизвестная ошибка"))
     }
-
-    // Удаляем лид из локального состояния
-    setLeads(leads.filter((lead) => lead.id !== id))
-    toast.success("Лид успешно удалён")
   }
 
   const handleExport = () => {
@@ -218,6 +114,18 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
 
   if (isLoading) {
     return <div className="text-center py-8">Загрузка лидов...</div>
+  }
+
+  if (error) {
+    return (
+      <Card className="p-4 sm:p-6">
+        <div className="flex flex-col items-center justify-center py-8">
+          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+          <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
+          <p className="text-sm text-muted-foreground">{error.message}</p>
+        </div>
+      </Card>
+    )
   }
 
   return (
@@ -313,7 +221,13 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
                   )}
                   <TableCell className="text-xs sm:text-sm">{new Date(lead.created_at).toLocaleDateString("ru-RU")}</TableCell>
                   <TableCell className="text-right">
-                    <Button onClick={() => handleDelete(lead.id)} variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <Button 
+                      onClick={() => handleDelete(lead.id)} 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 w-8 p-0"
+                      disabled={deleteLeadMutation.isPending}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>

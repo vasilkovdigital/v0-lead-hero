@@ -1,99 +1,38 @@
+/**
+ * UsersTable - Компонент для управления пользователями
+ * Только для superadmin. Показывает статистику и позволяет управлять квотами.
+ * 
+ * Использует React Query для кэширования данных
+ */
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { getAllUsers, updateUserQuotas } from "@/app/actions/users"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { QuotaCounter } from "@/components/quota-counter"
 import { cn } from "@/lib/utils"
-
-interface UserWithStats {
-  id: string
-  email: string
-  role: string
-  created_at: string
-  form_count: number
-  lead_count: number
-  max_forms: number | null
-  max_leads: number | null
-  can_publish_forms: boolean
-}
+import { useUsers, useUpdateUserQuotas } from "@/lib/hooks"
+import { AlertCircle } from "lucide-react"
 
 export function UsersTable() {
-  const [users, setUsers] = useState<UserWithStats[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [updatingUsers, setUpdatingUsers] = useState<Set<string>>(new Set())
+  // React Query хуки
+  const { data: users, isLoading, error } = useUsers()
+  const updateQuotasMutation = useUpdateUserQuotas()
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const result = await getAllUsers()
-
-      if ("error" in result) {
-        setError(result.error)
-        setLoading(false)
-        return
-      }
-
-      setUsers(result.users)
-      setLoading(false)
-    }
-
-    fetchUsers()
-  }, [])
-
-  const handleQuotaUpdate = useCallback(async (
+  const handleQuotaUpdate = async (
     userId: string,
     field: "max_forms" | "max_leads" | "can_publish_forms",
     value: number | null | boolean
   ) => {
-    // Добавляем пользователя в список обновляемых
-    setUpdatingUsers(prev => new Set(prev).add(userId))
-
-    // Оптимистичное обновление UI
-    setUsers(prev => prev.map(user => 
-      user.id === userId ? { ...user, [field]: value } : user
-    ))
-
     try {
-      const result = await updateUserQuotas({
-        userId,
-        [field]: value,
-      })
-
-      if ("error" in result) {
-        // Откатываем изменения при ошибке
-        const refreshResult = await getAllUsers()
-        if (!("error" in refreshResult)) {
-          setUsers(refreshResult.users)
-        }
-        console.error("Ошибка обновления:", result.error)
-      } else {
-        // Перезагружаем данные после успешного обновления для синхронизации
-        const refreshResult = await getAllUsers()
-        if (!("error" in refreshResult)) {
-          setUsers(refreshResult.users)
-        }
-      }
+      await updateQuotasMutation.mutateAsync({ userId, field, value })
     } catch (err) {
       console.error("Ошибка обновления квот:", err)
-      // Перезагружаем данные при ошибке
-      const refreshResult = await getAllUsers()
-      if (!("error" in refreshResult)) {
-        setUsers(refreshResult.users)
-      }
-    } finally {
-      setUpdatingUsers(prev => {
-        const next = new Set(prev)
-        next.delete(userId)
-        return next
-      })
     }
-  }, [])
+  }
 
-  if (loading) {
+  if (isLoading) {
     return <div className="text-center py-8">Загрузка пользователей...</div>
   }
 
@@ -105,7 +44,11 @@ export function UsersTable() {
           <CardDescription>Все зарегистрированные пользователи и их статистика</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-destructive">{error}</div>
+          <div className="flex flex-col items-center justify-center py-8">
+            <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+            <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
+            <p className="text-sm text-muted-foreground">{error.message}</p>
+          </div>
         </CardContent>
       </Card>
     )
@@ -132,7 +75,7 @@ export function UsersTable() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.length === 0 ? (
+              {!users || users.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Пользователей пока нет
@@ -140,7 +83,8 @@ export function UsersTable() {
                 </TableRow>
               ) : (
                 users.map((user) => {
-                  const isUpdating = updatingUsers.has(user.id)
+                  const isUpdating = updateQuotasMutation.isPending && 
+                    updateQuotasMutation.variables?.userId === user.id
                   const isSuperAdmin = user.role === "superadmin"
                   
                   return (
