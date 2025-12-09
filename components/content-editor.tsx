@@ -2,6 +2,7 @@
  * ContentEditor - Редактор контента формы
  * Позволяет настраивать тексты, AI-промпты и другие параметры формы
  * Поддерживает выбор формы для редактирования если у пользователя несколько форм
+ * Для суперадмина также доступна главная форма
  */
 "use client"
 
@@ -20,6 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { toast } from "sonner"
+
+// ID главной формы
+const MAIN_FORM_ID = "f5fad560-eea2-443c-98e9-1a66447dae86"
 
 interface ContentItem {
   id: string
@@ -30,6 +35,7 @@ interface ContentItem {
 interface Form {
   id: string
   name: string
+  isMain?: boolean
 }
 
 interface ContentEditorProps {
@@ -61,6 +67,10 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
 
     if (!user) return
 
+    // Проверяем роль пользователя
+    const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single()
+    const isSuperAdmin = userData?.role === "superadmin"
+
     // Загружаем все формы пользователя
     const { data: userForms } = await supabase
       .from("forms")
@@ -68,11 +78,33 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false })
 
-    if (userForms && userForms.length > 0) {
-      setForms(userForms)
+    let allForms: Form[] = userForms || []
+
+    // Для суперадмина добавляем главную форму, если её ещё нет в списке
+    if (isSuperAdmin) {
+      const hasMainForm = allForms.some(f => f.id === MAIN_FORM_ID)
+      if (!hasMainForm) {
+        // Загружаем информацию о главной форме
+        const { data: mainForm } = await supabase
+          .from("forms")
+          .select("id, name")
+          .eq("id", MAIN_FORM_ID)
+          .single()
+        
+        if (mainForm) {
+          allForms = [{ ...mainForm, isMain: true }, ...allForms]
+        }
+      } else {
+        // Помечаем главную форму, если она уже есть в списке
+        allForms = allForms.map(f => f.id === MAIN_FORM_ID ? { ...f, isMain: true } : f)
+      }
+    }
+
+    if (allForms.length > 0) {
+      setForms(allForms)
       // Выбираем первую форму по умолчанию
-      setSelectedFormId(userForms[0].id)
-      await fetchContent(userForms[0].id)
+      setSelectedFormId(allForms[0].id)
+      await fetchContent(allForms[0].id)
     }
     
     setIsLoading(false)
@@ -146,7 +178,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
       .upsert({ form_id: selectedFormId, key: "ai_result_format", value: resultFormat }, { onConflict: "form_id,key" })
 
     setIsSaving(false)
-    alert("Контент сохранён!")
+    toast.success("Контент сохранён!")
   }
 
   const handleLoadingMessageChange = (index: number, value: string) => {
@@ -183,7 +215,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
                   <SelectContent>
                     {forms.map((form) => (
                       <SelectItem key={form.id} value={form.id}>
-                        {form.name}
+                        {form.isMain ? `⭐ ${form.name} (Главная)` : form.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

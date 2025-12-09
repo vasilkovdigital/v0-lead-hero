@@ -103,7 +103,7 @@ export function AdminDashboard() {
         </div>
 
         <Tabs defaultValue={isSuperAdmin ? "dashboard" : "dashboard"} className="space-y-4 sm:space-y-6">
-          <TabsList className="flex-wrap h-auto border-b border-border pb-2">
+          <TabsList className="flex-wrap h-auto border-b border-border">
             {isSuperAdmin ? (
               <>
                 <TabsTrigger value="dashboard">Дашборд</TabsTrigger>
@@ -142,7 +142,7 @@ export function AdminDashboard() {
                 <FormsManager />
               </TabsContent>
               <TabsContent value="editor" className="space-y-4">
-                <ContentEditor formId={MAIN_FORM_ID} />
+                <ContentEditor />
               </TabsContent>
               <TabsContent value="leads" className="space-y-4">
                 <LeadsTable />

@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { createUserForm, deleteUserForm, canCreateMoreForms, updateFormNotificationSetting } from "@/app/actions/forms"
 import { Switch } from "@/components/ui/switch"
+import { toast } from "sonner"
 
 interface Form {
   id: string
@@ -199,14 +200,14 @@ export function FormsManager() {
   const copyFormLink = (form: Form) => {
     const link = `${window.location.origin}/form/${form.id}`
     navigator.clipboard.writeText(link)
-    alert("Ссылка скопирована!")
+    toast.success("Ссылка скопирована!")
   }
 
   const copyEmbedCode = () => {
     if (!selectedForm) return
     const embedCode = `<iframe src="${window.location.origin}/form/${selectedForm.id}" width="100%" height="700" frameborder="0" style="border: none; border-radius: 8px;"></iframe>`
     navigator.clipboard.writeText(embedCode)
-    alert("Код для встраивания скопирован!")
+    toast.success("Код для встраивания скопирован!")
   }
 
   const openEditDialog = (form: Form) => {

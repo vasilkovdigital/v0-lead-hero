@@ -19,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { toast } from "sonner"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 interface Lead {
   id: string
@@ -46,6 +48,7 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
   const [selectedFormId, setSelectedFormId] = useState<string | "all">("all")
   const [isLoading, setIsLoading] = useState(true)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const fetchFormsAndLeads = useCallback(async () => {
     const supabase = createClient()
@@ -137,18 +140,27 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
   }, [fetchFormsAndLeads])
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Удалить этот лид?")) return
+    const confirmed = await confirm({
+      title: "Удалить этот лид?",
+      description: "Это действие нельзя отменить.",
+      confirmText: "Удалить",
+      cancelText: "Отмена",
+      variant: "destructive"
+    })
+
+    if (!confirmed) return
 
     const result = await deleteLead(id)
 
     if ("error" in result) {
       console.error("Ошибка удаления лида:", result.error)
-      alert("Не удалось удалить лид: " + result.error)
+      toast.error("Не удалось удалить лид: " + result.error)
       return
     }
 
     // Удаляем лид из локального состояния
     setLeads(leads.filter((lead) => lead.id !== id))
+    toast.success("Лид успешно удалён")
   }
 
   const handleExport = () => {
@@ -311,6 +323,7 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
           </TableBody>
         </Table>
       </div>
+      {ConfirmDialog}
     </Card>
   )
 }
