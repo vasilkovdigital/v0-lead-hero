@@ -2,12 +2,14 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export function AuthHeader() {
   return (
     <div className="fixed top-0 right-0 p-2 sm:p-4 md:p-6 z-50 flex gap-2 sm:gap-3">
+      <ThemeToggle />
       <Link href="/auth/login">
-        <Button variant="outline" className="bg-card/80 backdrop-blur-sm border-border hover:bg-card h-8 sm:h-10 text-xs sm:text-sm px-3 sm:px-4">
+        <Button variant="outline" className="bg-card/80 backdrop-blur-sm border-border hover:bg-secondary hover:text-secondary-foreground text-foreground h-8 sm:h-10 text-xs sm:text-sm px-3 sm:px-4">
           <span className="hidden sm:inline">Login</span>
           <span className="sm:hidden">Вход</span>
         </Button>

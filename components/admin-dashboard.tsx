@@ -10,6 +10,7 @@
 import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { LeadsTable } from "./leads-table"
 import { ContentEditor } from "./content-editor"
 import { FormsManager } from "./forms-manager"
@@ -89,11 +90,14 @@ export function AdminDashboard() {
         <div className="space-y-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h1 className="text-2xl sm:text-3xl font-bold">{getPanelTitle()}</h1>
-            <Button onClick={handleLogout} variant="outline" size="sm" className="h-9 sm:h-10 text-xs sm:text-sm">
-              <LogOut className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Logout</span>
-              <span className="sm:hidden">Выход</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <Button onClick={handleLogout} variant="outline" size="sm" className="h-9 sm:h-10 text-xs sm:text-sm">
+                <LogOut className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Logout</span>
+                <span className="sm:hidden">Выход</span>
+              </Button>
+            </div>
           </div>
           <p className="text-sm sm:text-base text-muted-foreground">{getPanelDescription()}</p>
         </div>

@@ -3,6 +3,7 @@
 import type React from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,6 +44,9 @@ export default function RegisterPage() {
   if (success) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center px-4 sm:px-6 md:px-[10%] lg:px-0 py-4">
+        <div className="fixed top-4 right-4 z-50">
+          <ThemeToggle />
+        </div>
         <div className="w-full max-w-7xl mx-auto grid grid-cols-12 gap-4">
           <div className="col-span-12 sm:col-span-10 sm:col-start-2 md:col-start-5 md:col-span-4">
             <Card>
@@ -68,6 +72,9 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center px-4 sm:px-6 md:px-[10%] lg:px-0 py-4">
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-7xl mx-auto grid grid-cols-12 gap-4">
         <div className="col-span-12 sm:col-span-10 sm:col-start-2 md:col-start-5 md:col-span-4">
           <Card>
