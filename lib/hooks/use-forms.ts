@@ -109,8 +109,10 @@ export function useCreateForm() {
       return result.form
     },
     onSuccess: () => {
-      // Инвалидируем кэш форм
-      queryClient.invalidateQueries({ queryKey: ["forms"] })
+      // Инвалидируем кэш форм (все запросы, начинающиеся с ["forms"])
+      queryClient.invalidateQueries({ queryKey: ["forms"], exact: false })
+      // Инвалидируем кэш форм для редактора (все запросы, начинающиеся с ["editorForms"])
+      queryClient.invalidateQueries({ queryKey: ["editorForms"], exact: false })
     },
   })
 }
@@ -130,7 +132,10 @@ export function useDeleteForm() {
       return result
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["forms"] })
+      // Инвалидируем кэш форм (все запросы, начинающиеся с ["forms"])
+      queryClient.invalidateQueries({ queryKey: ["forms"], exact: false })
+      // Инвалидируем кэш форм для редактора (все запросы, начинающиеся с ["editorForms"])
+      queryClient.invalidateQueries({ queryKey: ["editorForms"], exact: false })
     },
   })
 }
@@ -152,7 +157,10 @@ export function useUpdateFormName() {
       if (error) throw new Error(error.message)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["forms"] })
+      // Инвалидируем кэш форм (все запросы, начинающиеся с ["forms"])
+      queryClient.invalidateQueries({ queryKey: ["forms"], exact: false })
+      // Инвалидируем кэш форм для редактора (все запросы, начинающиеся с ["editorForms"])
+      queryClient.invalidateQueries({ queryKey: ["editorForms"], exact: false })
     },
   })
 }
@@ -164,17 +172,22 @@ export function useToggleFormActive() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ formId, isActive }: { formId: string; isActive: boolean }) => {
+    mutationFn: async ({ formId, currentIsActive }: { formId: string; currentIsActive: boolean }) => {
       const supabase = createClient()
+      // Переключаем состояние: если сейчас активна, делаем неактивной, и наоборот
+      const newIsActive = !currentIsActive
       const { error } = await supabase
         .from("forms")
-        .update({ is_active: !isActive })
+        .update({ is_active: newIsActive })
         .eq("id", formId)
       
       if (error) throw new Error(error.message)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["forms"] })
+      // Инвалидируем кэш форм (все запросы, начинающиеся с ["forms"])
+      queryClient.invalidateQueries({ queryKey: ["forms"], exact: false })
+      // Инвалидируем кэш форм для редактора (все запросы, начинающиеся с ["editorForms"])
+      queryClient.invalidateQueries({ queryKey: ["editorForms"], exact: false })
     },
   })
 }
@@ -194,7 +207,10 @@ export function useUpdateFormNotification() {
       return result
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["forms"] })
+      // Инвалидируем кэш форм (все запросы, начинающиеся с ["forms"])
+      queryClient.invalidateQueries({ queryKey: ["forms"], exact: false })
+      // Инвалидируем кэш форм для редактора (все запросы, начинающиеся с ["editorForms"])
+      queryClient.invalidateQueries({ queryKey: ["editorForms"], exact: false })
     },
   })
 }

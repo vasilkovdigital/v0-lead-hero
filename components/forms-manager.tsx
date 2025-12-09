@@ -68,6 +68,19 @@ export function FormsManager() {
   const totalLeads = data?.totalLeads || 0
   const limitInfo = data?.limitInfo || null
 
+  // Проверяем ошибку перед проверкой загрузки
+  if (queryError) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+          <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
+          <p className="text-sm text-muted-foreground">{queryError.message}</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   // Показываем загрузку, если данные еще не загрузились
   if (isLoading || !data) {
     return <div className="text-center py-12">Загрузка...</div>
@@ -112,7 +125,7 @@ export function FormsManager() {
 
   const toggleFormActive = async (form: Form) => {
     try {
-      await toggleActiveMutation.mutateAsync({ formId: form.id, isActive: form.is_active })
+      await toggleActiveMutation.mutateAsync({ formId: form.id, currentIsActive: form.is_active })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка изменения статуса")
     }
@@ -157,18 +170,6 @@ export function FormsManager() {
   const openDeleteDialog = (form: Form) => {
     setSelectedForm(form)
     setShowDeleteDialog(true)
-  }
-
-  if (queryError) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-          <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
-          <p className="text-sm text-muted-foreground">{queryError.message}</p>
-        </CardContent>
-      </Card>
-    )
   }
 
   // Нет форм - показываем приглашение создать

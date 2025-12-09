@@ -95,6 +95,11 @@ export function useConfirm() {
   const confirm = React.useCallback(
     (opts: UseConfirmOptions): Promise<boolean> => {
       return new Promise((resolve) => {
+        // Если уже есть незавершенный Promise, отклоняем его (пользователь закрыл диалог или вызвал новый)
+        if (resolveRef.current) {
+          resolveRef.current(false)
+        }
+        
         setOptions(opts)
         setIsOpen(true)
         resolveRef.current = resolve

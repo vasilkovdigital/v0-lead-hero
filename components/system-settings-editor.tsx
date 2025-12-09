@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Save, Settings, AlertCircle, CheckCircle2 } from "lucide-react"
+import { AlertCircle, CheckCircle2 } from "lucide-react"
 import { useSystemSettings, useSaveSystemSettings } from "@/lib/hooks"
 
 export function SystemSettingsEditor() {
@@ -77,8 +77,7 @@ export function SystemSettingsEditor() {
       <div className="space-y-6 sm:space-y-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-              <Settings className="h-5 w-5 sm:h-6 sm:w-6" />
+            <h2 className="text-xl sm:text-2xl font-bold">
               Системные настройки
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground">
@@ -88,9 +87,8 @@ export function SystemSettingsEditor() {
           <Button 
             onClick={handleSave} 
             disabled={saveSettingsMutation.isPending} 
-            className="min-w-[140px] w-full sm:w-auto h-10 sm:h-11"
+            className="h-12 w-full sm:w-[200px] rounded-[18px] bg-black text-white hover:bg-black/90 disabled:opacity-50"
           >
-            <Save className="mr-2 h-4 w-4" />
             {saveSettingsMutation.isPending ? "Сохранение..." : "Сохранить"}
           </Button>
         </div>

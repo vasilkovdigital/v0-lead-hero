@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
-import { Save, Settings, AlertCircle } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -23,15 +23,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { useEditorForms, useFormContent, useSaveFormContent } from "@/lib/hooks"
+import { useEditorForms, useFormContent, useSaveFormContent, useCurrentUser } from "@/lib/hooks"
 
 interface ContentEditorProps {
   formId?: string
 }
 
 export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
+  // Проверяем загрузку пользователя сначала
+  const { data: user, isLoading: userLoading } = useCurrentUser()
+  
   // React Query хуки
-  const { data: formsData, isLoading: formsLoading } = useEditorForms()
+  const { data: formsData, isLoading: formsLoading, error: formsError } = useEditorForms()
   const saveContentMutation = useSaveFormContent()
 
   // Локальное состояние
@@ -51,7 +54,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
   }, [forms, propFormId, selectedFormId])
 
   // Загружаем контент выбранной формы
-  const { data: contentData, isLoading: contentLoading } = useFormContent(selectedFormId)
+  const { data: contentData, isLoading: contentLoading, error: contentError } = useFormContent(selectedFormId)
 
   // Обновляем локальное состояние когда загружаем контент
   useEffect(() => {
@@ -90,13 +93,40 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
     setLoadingMessages(newMessages)
   }
 
-  const isLoading = formsLoading || contentLoading
+  const isLoading = userLoading || formsLoading || contentLoading
 
-  if (isLoading && !contentData) {
+  // Показываем загрузку, если пользователь еще загружается или данные еще не загрузились
+  if (userLoading || (isLoading && !contentData && !formsData)) {
     return <div className="text-center py-8">Загрузка контента...</div>
   }
 
-  if (!selectedFormId && forms.length === 0 && !formsLoading) {
+  // Проверяем ошибки перед проверкой загрузки
+  if (formsError) {
+    return (
+      <Card className="p-4 sm:p-6">
+        <div className="flex flex-col items-center justify-center py-8">
+          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+          <p className="text-lg font-medium mb-2">Ошибка загрузки форм</p>
+          <p className="text-sm text-muted-foreground">{formsError.message}</p>
+        </div>
+      </Card>
+    )
+  }
+
+  if (contentError) {
+    return (
+      <Card className="p-4 sm:p-6">
+        <div className="flex flex-col items-center justify-center py-8">
+          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+          <p className="text-lg font-medium mb-2">Ошибка загрузки контента</p>
+          <p className="text-sm text-muted-foreground">{contentError.message}</p>
+        </div>
+      </Card>
+    )
+  }
+
+  // Показываем "форма не найдена" только если пользователь загружен и данных нет
+  if (!userLoading && !formsLoading && !selectedFormId && forms.length === 0) {
     return (
       <Card className="p-4 sm:p-6">
         <div className="flex flex-col items-center justify-center py-8">
@@ -116,31 +146,27 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
             <h2 className="text-xl sm:text-2xl font-bold">Редактор контента</h2>
             <p className="text-sm sm:text-base text-muted-foreground">Настройка текстов и AI параметров</p>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
             {/* Выбор формы (если несколько) */}
             {forms.length > 1 && !propFormId && (
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
-                <Select value={selectedFormId || ""} onValueChange={handleFormChange}>
-                  <SelectTrigger className="!h-9 w-full sm:w-[200px]">
-                    <SelectValue placeholder="Выберите форму" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {forms.map((form) => (
-                      <SelectItem key={form.id} value={form.id}>
-                        {form.isMain ? `⭐ ${form.name} (Главная)` : form.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={selectedFormId || ""} onValueChange={handleFormChange}>
+                <SelectTrigger className="relative h-12 w-full sm:w-[280px] rounded-[18px] bg-white dark:bg-background border border-input hover:bg-accent/50 !justify-center [&>span]:text-center [&>svg]:absolute [&>svg]:right-3">
+                  <SelectValue placeholder="Выберите форму" />
+                </SelectTrigger>
+                <SelectContent>
+                  {forms.map((form) => (
+                    <SelectItem key={form.id} value={form.id} className="text-base">
+                      {form.isMain ? `${form.name} (Главная)` : form.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             <Button 
               onClick={handleSave} 
               disabled={saveContentMutation.isPending || contentLoading} 
-              className="min-w-[140px] w-full sm:w-auto h-10 sm:h-11"
+              className="h-12 w-full sm:w-[200px] rounded-[18px] bg-black text-white hover:bg-black/90 disabled:opacity-50"
             >
-              <Save className="mr-2 h-4 w-4" />
               {saveContentMutation.isPending ? "Сохранение..." : "Сохранить"}
             </Button>
           </div>

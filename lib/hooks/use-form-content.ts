@@ -96,13 +96,17 @@ async function fetchFormContent(formId: string): Promise<FormContentData> {
   }
 
   const contentMap: Record<string, string> = {}
-  const messages: string[] = []
+  const messagesMap: Record<number, string> = {}
   let prompt = ""
   let format = "text"
 
   data.forEach((item: ContentItem) => {
     if (item.key.startsWith("loading_message_")) {
-      messages.push(item.value)
+      // Извлекаем числовой индекс из ключа (например, "loading_message_1" -> 1)
+      const index = parseInt(item.key.replace("loading_message_", ""), 10)
+      if (!isNaN(index)) {
+        messagesMap[index] = item.value
+      }
     } else if (item.key === "ai_system_prompt") {
       prompt = item.value
     } else if (item.key === "ai_result_format") {
@@ -111,6 +115,12 @@ async function fetchFormContent(formId: string): Promise<FormContentData> {
       contentMap[item.key] = item.value
     }
   })
+
+  // Сортируем сообщения по индексу и собираем в массив
+  const messages = Object.keys(messagesMap)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map(index => messagesMap[index])
 
   return {
     content: contentMap,

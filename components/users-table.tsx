@@ -6,6 +6,7 @@
  */
 "use client"
 
+import { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -19,16 +20,22 @@ export function UsersTable() {
   // React Query хуки
   const { data: users, isLoading, error } = useUsers()
   const updateQuotasMutation = useUpdateUserQuotas()
+  
+  // Отслеживаем, какой пользователь сейчас обновляется
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
 
   const handleQuotaUpdate = async (
     userId: string,
     field: "max_forms" | "max_leads" | "can_publish_forms",
     value: number | null | boolean
   ) => {
+    setUpdatingUserId(userId)
     try {
       await updateQuotasMutation.mutateAsync({ userId, field, value })
     } catch (err) {
       console.error("Ошибка обновления квот:", err)
+    } finally {
+      setUpdatingUserId(null)
     }
   }
 
@@ -83,8 +90,7 @@ export function UsersTable() {
                 </TableRow>
               ) : (
                 users.map((user) => {
-                  const isUpdating = updateQuotasMutation.isPending && 
-                    updateQuotasMutation.variables?.userId === user.id
+                  const isUpdating = updatingUserId === user.id && updateQuotasMutation.isPending
                   const isSuperAdmin = user.role === "superadmin"
                   
                   return (

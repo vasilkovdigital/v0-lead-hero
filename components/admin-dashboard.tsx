@@ -102,7 +102,7 @@ export function AdminDashboard() {
           <p className="text-sm sm:text-base text-muted-foreground">{getPanelDescription()}</p>
         </div>
 
-        <Tabs defaultValue={isSuperAdmin ? "dashboard" : "dashboard"} className="space-y-4 sm:space-y-6">
+        <Tabs defaultValue="dashboard" className="space-y-4 sm:space-y-6">
           <TabsList className="flex-wrap h-auto border-b border-border">
             {isSuperAdmin ? (
               <>
@@ -147,6 +147,12 @@ export function AdminDashboard() {
               <TabsContent value="leads" className="space-y-4">
                 <LeadsTable />
               </TabsContent>
+              <TabsContent value="integrations" className="space-y-4">
+                {/* Скоро */}
+              </TabsContent>
+              <TabsContent value="balance" className="space-y-4">
+                {/* Скоро */}
+              </TabsContent>
               <TabsContent value="system" className="space-y-4">
                 <SystemSettingsEditor />
               </TabsContent>
@@ -161,6 +167,12 @@ export function AdminDashboard() {
               </TabsContent>
               <TabsContent value="leads" className="space-y-4">
                 <LeadsTable />
+              </TabsContent>
+              <TabsContent value="integrations" className="space-y-4">
+                {/* Скоро */}
+              </TabsContent>
+              <TabsContent value="balance" className="space-y-4">
+                {/* Скоро */}
               </TabsContent>
             </>
           )}

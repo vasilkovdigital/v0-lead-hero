@@ -131,8 +131,9 @@ export function useDeleteLead() {
     },
     onSuccess: () => {
       // Инвалидируем кэш лидов и форм (т.к. изменился счетчик)
-      queryClient.invalidateQueries({ queryKey: ["leads"] })
-      queryClient.invalidateQueries({ queryKey: ["forms"] })
+      // Используем exact: false для инвалидации всех запросов с этими ключами
+      queryClient.invalidateQueries({ queryKey: ["leads"], exact: false })
+      queryClient.invalidateQueries({ queryKey: ["forms"], exact: false })
     },
   })
 }
