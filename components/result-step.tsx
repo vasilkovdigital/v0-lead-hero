@@ -11,10 +11,11 @@ interface ResultStepProps {
   url: string
   formId: string
   result: { type: string; text: string; imageUrl?: string }
+  customFields?: Record<string, unknown>
   onSuccess: () => void
 }
 
-export function ResultStep({ url, formId, result, onSuccess }: ResultStepProps) {
+export function ResultStep({ url, formId, result, customFields, onSuccess }: ResultStepProps) {
   const [email, setEmail] = useState("")
   const [isValid, setIsValid] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -44,6 +45,7 @@ export function ResultStep({ url, formId, result, onSuccess }: ResultStepProps) 
       url,
       resultText: result.text,
       resultImageUrl: result.imageUrl || null,
+      customFields,
     })
 
     if (response.error) {

@@ -4,12 +4,22 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
+import { getFormFields, type FormField, type FieldType } from "@/app/actions/form-fields"
 
 const MAIN_FORM_ID = "f5fad560-eea2-443c-98e9-1a66447dae86"
 
 interface URLSubmissionStepProps {
-  onSubmit: (url: string) => void
+  onSubmit: (url: string, customFields?: Record<string, unknown>) => void
   formId?: string
 }
 
@@ -29,10 +39,16 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
     disclaimer: "Бесплатно • Занимает 30 секунд",
   })
 
+  // Динамические поля
+  const [dynamicFields, setDynamicFields] = useState<FormField[]>([])
+  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
+
   useEffect(() => {
     const fetchContent = async () => {
       setContentLoading(true)
       const supabase = createClient()
+      
+      // Загружаем контент формы
       const { data } = await supabase.from("form_content").select("key, value").eq("form_id", effectiveFormId)
 
       if (data && data.length > 0) {
@@ -49,6 +65,25 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
           disclaimer: contentMap.disclaimer || "Бесплатно • Занимает 30 секунд",
         })
       }
+
+      // Загружаем динамические поля
+      const fieldsResult = await getFormFields(effectiveFormId)
+      if ("fields" in fieldsResult && fieldsResult.fields.length > 0) {
+        setDynamicFields(fieldsResult.fields)
+        // Инициализируем значения полей
+        const initialValues: Record<string, unknown> = {}
+        fieldsResult.fields.forEach((field) => {
+          if (field.field_type === "checkbox") {
+            initialValues[field.field_key] = false
+          } else if (field.field_type === "multiselect") {
+            initialValues[field.field_key] = []
+          } else {
+            initialValues[field.field_key] = ""
+          }
+        })
+        setFieldValues(initialValues)
+      }
+
       setContentLoading(false)
     }
 
@@ -71,9 +106,37 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
     setError(null)
   }
 
+  const handleFieldChange = (fieldKey: string, value: unknown) => {
+    setFieldValues((prev) => ({ ...prev, [fieldKey]: value }))
+    setError(null)
+  }
+
+  // Проверка обязательных полей
+  const validateRequiredFields = (): boolean => {
+    for (const field of dynamicFields) {
+      if (field.is_required) {
+        const value = fieldValues[field.field_key]
+        if (field.field_type === "checkbox" && value !== true) {
+          return false
+        } else if (field.field_type === "multiselect" && (!Array.isArray(value) || value.length === 0)) {
+          return false
+        } else if (field.field_type !== "checkbox" && field.field_type !== "multiselect" && !value) {
+          return false
+        }
+      }
+    }
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isValid || isLoading) return
+
+    // Проверяем обязательные поля
+    if (!validateRequiredFields()) {
+      setError("Заполните все обязательные поля")
+      return
+    }
 
     setIsLoading(true)
     setError(null)
@@ -101,8 +164,157 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
       return
     }
 
-    // Лимит проверяется на уровне аккаунта в createLead()
-    onSubmit(formattedUrl)
+    // Передаём URL и кастомные поля
+    onSubmit(formattedUrl, dynamicFields.length > 0 ? fieldValues : undefined)
+  }
+
+  // Рендер динамического поля
+  const renderField = (field: FormField) => {
+    const value = fieldValues[field.field_key]
+
+    switch (field.field_type) {
+      case "text":
+        return (
+          <div key={field.id} className="space-y-2">
+            <Label htmlFor={field.field_key}>
+              {field.field_label}
+              {field.is_required && <span className="text-destructive ml-1">*</span>}
+            </Label>
+            <Input
+              id={field.field_key}
+              type="text"
+              value={(value as string) || ""}
+              onChange={(e) => handleFieldChange(field.field_key, e.target.value)}
+              className="h-12 sm:h-14 text-base px-4 sm:px-6 bg-card border-border"
+              disabled={isLoading}
+            />
+          </div>
+        )
+
+      case "url":
+        return (
+          <div key={field.id} className="space-y-2">
+            <Label htmlFor={field.field_key}>
+              {field.field_label}
+              {field.is_required && <span className="text-destructive ml-1">*</span>}
+            </Label>
+            <Input
+              id={field.field_key}
+              type="url"
+              value={(value as string) || ""}
+              onChange={(e) => handleFieldChange(field.field_key, e.target.value)}
+              placeholder="https://example.com"
+              className="h-12 sm:h-14 text-base px-4 sm:px-6 bg-card border-border"
+              disabled={isLoading}
+            />
+          </div>
+        )
+
+      case "select":
+        return (
+          <div key={field.id} className="space-y-2">
+            <Label htmlFor={field.field_key}>
+              {field.field_label}
+              {field.is_required && <span className="text-destructive ml-1">*</span>}
+            </Label>
+            <Select
+              value={(value as string) || ""}
+              onValueChange={(val) => handleFieldChange(field.field_key, val)}
+              disabled={isLoading}
+            >
+              <SelectTrigger className="h-12 sm:h-14 text-base px-4 sm:px-6 bg-card border-border">
+                <SelectValue placeholder="Выберите..." />
+              </SelectTrigger>
+              <SelectContent>
+                {field.options?.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )
+
+      case "multiselect":
+        const selectedValues = (value as string[]) || []
+        return (
+          <div key={field.id} className="space-y-2">
+            <Label>
+              {field.field_label}
+              {field.is_required && <span className="text-destructive ml-1">*</span>}
+            </Label>
+            <div className="space-y-2 p-4 border rounded-lg bg-card">
+              {field.options?.map((option) => (
+                <div key={option.value} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`${field.field_key}-${option.value}`}
+                    checked={selectedValues.includes(option.value)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        handleFieldChange(field.field_key, [...selectedValues, option.value])
+                      } else {
+                        handleFieldChange(field.field_key, selectedValues.filter((v) => v !== option.value))
+                      }
+                    }}
+                    disabled={isLoading}
+                  />
+                  <Label htmlFor={`${field.field_key}-${option.value}`} className="cursor-pointer">
+                    {option.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+
+      case "checkbox":
+        return (
+          <div key={field.id} className="flex items-center space-x-2">
+            <Checkbox
+              id={field.field_key}
+              checked={(value as boolean) || false}
+              onCheckedChange={(checked) => handleFieldChange(field.field_key, checked)}
+              disabled={isLoading}
+            />
+            <Label htmlFor={field.field_key} className="cursor-pointer">
+              {field.field_label}
+              {field.is_required && <span className="text-destructive ml-1">*</span>}
+            </Label>
+          </div>
+        )
+
+      case "image":
+        return (
+          <div key={field.id} className="space-y-2">
+            <Label htmlFor={field.field_key}>
+              {field.field_label}
+              {field.is_required && <span className="text-destructive ml-1">*</span>}
+            </Label>
+            <Input
+              id={field.field_key}
+              type="file"
+              accept="image/jpeg,image/png"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) {
+                  // Сохраняем base64 для отправки на сервер
+                  const reader = new FileReader()
+                  reader.onloadend = () => {
+                    handleFieldChange(field.field_key, reader.result)
+                  }
+                  reader.readAsDataURL(file)
+                }
+              }}
+              className="h-12 sm:h-14 text-base px-4 sm:px-6 bg-card border-border"
+              disabled={isLoading}
+            />
+          </div>
+        )
+
+      default:
+        return null
+    }
   }
 
   if (contentLoading) {
@@ -128,6 +340,7 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
       </div>
 
       <form onSubmit={handleSubmit} className="w-full max-w-md space-y-4">
+        {/* Основное поле URL */}
         <div className="relative">
           <Input
             type="text"
@@ -138,7 +351,16 @@ export function URLSubmissionStep({ onSubmit, formId }: URLSubmissionStepProps) 
             disabled={isLoading}
           />
         </div>
+
+        {/* Динамические поля */}
+        {dynamicFields.length > 0 && (
+          <div className="space-y-4 text-left">
+            {dynamicFields.map(renderField)}
+          </div>
+        )}
+
         {error && <p className="text-sm text-destructive text-left">{error}</p>}
+        
         <Button type="submit" disabled={!isValid || isLoading} className="w-full h-12 sm:h-14 text-base sm:text-lg font-semibold">
           {isLoading ? "Обработка..." : content.buttonText}
         </Button>

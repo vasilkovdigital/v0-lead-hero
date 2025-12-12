@@ -64,7 +64,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { url, formId } = body
+    const { url, formId, customFields } = body
 
     if (!url || !formId) {
       console.error("[v0] Missing required fields:", { url: !!url, formId: !!formId })
@@ -75,6 +75,23 @@ export async function POST(req: Request) {
         },
         { status: 400, headers: corsHeaders },
       )
+    }
+
+    // Форматируем кастомные поля для включения в промпт
+    let customFieldsContext = ""
+    if (customFields && typeof customFields === "object" && Object.keys(customFields).length > 0) {
+      customFieldsContext = "\n\nAdditional user-provided information:\n"
+      for (const [key, value] of Object.entries(customFields)) {
+        if (value !== undefined && value !== null && value !== "") {
+          if (Array.isArray(value)) {
+            customFieldsContext += `- ${key}: ${value.join(", ")}\n`
+          } else if (typeof value === "boolean") {
+            customFieldsContext += `- ${key}: ${value ? "Yes" : "No"}\n`
+          } else {
+            customFieldsContext += `- ${key}: ${value}\n`
+          }
+        }
+      }
     }
 
     // Проверка наличия API ключа OpenAI
@@ -164,7 +181,7 @@ export async function POST(req: Request) {
               {
                 role: "user",
                 content: `User preferences from URL content:
-${urlContent.slice(0, 1500)}
+${urlContent.slice(0, 1500)}${customFieldsContext}
 
 Create an image prompt based on this content:`,
               },
@@ -313,7 +330,7 @@ Create an image prompt based on this content:`,
             },
             {
               role: "user",
-              content: `URL: ${url}\n\nContent:\n${urlContent}\n\nPlease provide your analysis and recommendations.`,
+              content: `URL: ${url}\n\nContent:\n${urlContent}${customFieldsContext}\n\nPlease provide your analysis and recommendations.`,
             },
           ],
           max_tokens: 1500,

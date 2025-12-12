@@ -22,6 +22,7 @@ interface CreateLeadParams {
   url: string
   resultText: string
   resultImageUrl: string | null
+  customFields?: Record<string, unknown>
 }
 
 interface SendOwnerNotificationParams {
@@ -259,7 +260,7 @@ async function checkLeadLimit(ownerId: string): Promise<{ canCreate: boolean; cu
   return { canCreate: currentCount < maxLeads, currentCount, limit: maxLeads }
 }
 
-export async function createLead({ formId, email, url, resultText, resultImageUrl }: CreateLeadParams) {
+export async function createLead({ formId, email, url, resultText, resultImageUrl, customFields }: CreateLeadParams) {
   const isTestEmail = email.toLowerCase() === TEST_EMAIL.toLowerCase()
 
   // Проверяем, является ли текущий авторизованный пользователь владельцем формы
@@ -323,6 +324,7 @@ export async function createLead({ formId, email, url, resultText, resultImageUr
     result_text: resultText,
     result_image_url: resultImageUrl,
     status: "completed",
+    custom_fields: customFields || {},
   })
 
   if (insertError) {

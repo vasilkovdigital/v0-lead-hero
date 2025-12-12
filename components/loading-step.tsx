@@ -15,11 +15,12 @@ import { AlertCircle, RefreshCw } from "lucide-react"
 interface LoadingStepProps {
   url: string
   formId?: string
+  customFields?: Record<string, unknown>
   onComplete: (result: { type: string; text: string; imageUrl?: string }) => void
   onError?: (error: string) => void
 }
 
-export function LoadingStep({ url, formId, onComplete, onError }: LoadingStepProps) {
+export function LoadingStep({ url, formId, customFields, onComplete, onError }: LoadingStepProps) {
   const [messageIndex, setMessageIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
@@ -82,6 +83,7 @@ export function LoadingStep({ url, formId, onComplete, onError }: LoadingStepPro
         body: JSON.stringify({
           url,
           formId,
+          customFields,
         }),
       })
 
@@ -109,7 +111,7 @@ export function LoadingStep({ url, formId, onComplete, onError }: LoadingStepPro
     } finally {
       setIsRetrying(false)
     }
-  }, [url, formId, onError])
+  }, [url, formId, customFields, onError])
 
   // Ротация сообщений
   useEffect(() => {
