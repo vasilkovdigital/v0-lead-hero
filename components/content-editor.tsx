@@ -9,7 +9,6 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { AlertCircle } from "lucide-react"
 import {
   Select,
@@ -48,8 +47,17 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
   const [loadingMessages, setLoadingMessages] = useState<string[]>(["", "", ""])
   const [systemPrompt, setSystemPrompt] = useState<string>("")
   const [resultFormat, setResultFormat] = useState<string>("text")
+  const [activeTab, setActiveTab] = useState("data")
 
   const forms = formsData?.forms || []
+
+  const tabTitles: Record<string, string> = {
+    data: "Данные формы",
+    contacts: "Контакты",
+    generation: "Генерация",
+    result: "Результат",
+    share: "Поделиться"
+  }
 
   // Устанавливаем первую форму по умолчанию
   useEffect(() => {
@@ -108,51 +116,51 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
   // Проверяем ошибки перед проверкой загрузки
   if (formsError) {
     return (
-      <Card className="p-4 sm:p-6">
+      <div className="py-4">
         <div className="flex flex-col items-center justify-center py-8">
           <AlertCircle className="h-12 w-12 text-destructive mb-4" />
           <p className="text-lg font-medium mb-2">Ошибка загрузки форм</p>
           <p className="text-sm text-muted-foreground">{formsError.message}</p>
         </div>
-      </Card>
+      </div>
     )
   }
 
   if (contentError) {
     return (
-      <Card className="p-4 sm:p-6">
+      <div className="py-4">
         <div className="flex flex-col items-center justify-center py-8">
           <AlertCircle className="h-12 w-12 text-destructive mb-4" />
           <p className="text-lg font-medium mb-2">Ошибка загрузки контента</p>
           <p className="text-sm text-muted-foreground">{contentError.message}</p>
         </div>
-      </Card>
+      </div>
     )
   }
 
   // Показываем "форма не найдена" только если пользователь загружен и данных нет
   if (!userLoading && !formsLoading && !selectedFormId && forms.length === 0) {
     return (
-      <Card className="p-4 sm:p-6">
+      <div className="py-4">
         <div className="flex flex-col items-center justify-center py-8">
           <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-lg font-medium mb-2">Форма не найдена</p>
           <p className="text-sm text-muted-foreground">Сначала создайте форму.</p>
         </div>
-      </Card>
+      </div>
     )
   }
 
   const selectedForm = forms.find(f => f.id === selectedFormId)
 
   return (
-    <Card className="p-4 sm:p-6">
+    <div className="py-4">
       <div className="space-y-6 sm:space-y-8">
         {/* Заголовок с выбором формы */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold">
-              Редактор — Данные формы
+              Редактор — {tabTitles[activeTab]}
             </h2>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
@@ -180,7 +188,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
         </div>
 
         {/* Вкладки редактора */}
-        <Tabs defaultValue="data" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full justify-start bg-transparent border-b rounded-none h-auto p-0 gap-0">
             <TabsTrigger
               value="data"
@@ -251,7 +259,7 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           <Button
             onClick={handleSave}
             disabled={saveContentMutation.isPending || contentLoading}
-            className="h-12 w-full sm:w-[200px] rounded-[18px] bg-black text-white hover:bg-black/90 disabled:opacity-50"
+            className="h-12 w-full sm:w-[200px] rounded-[18px] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {saveContentMutation.isPending ? "Сохранение..." : "Продолжить"}
           </Button>
@@ -265,6 +273,6 @@ export function ContentEditor({ formId: propFormId }: ContentEditorProps) {
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

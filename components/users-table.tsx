@@ -8,7 +8,6 @@
 
 import { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { QuotaCounter } from "@/components/quota-counter"
@@ -45,29 +44,29 @@ export function UsersTable() {
 
   if (error) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Пользователи</CardTitle>
-          <CardDescription>Все зарегистрированные пользователи и их статистика</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="py-4 space-y-6">
+        <div className="space-y-1">
+          <h2 className="text-xl sm:text-2xl font-bold">Пользователи</h2>
+          <p className="text-sm text-muted-foreground">Все зарегистрированные пользователи и их статистика</p>
+        </div>
+        <div>
           <div className="flex flex-col items-center justify-center py-8">
             <AlertCircle className="h-12 w-12 text-destructive mb-4" />
             <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
             <p className="text-sm text-muted-foreground">{error.message}</p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
 
   return (
-    <Card>
-      <CardHeader className="p-4 sm:p-6">
-        <CardTitle className="text-xl sm:text-2xl">Пользователи</CardTitle>
-        <CardDescription className="text-sm">Управление квотами и статистика пользователей</CardDescription>
-      </CardHeader>
-      <CardContent className="p-4 sm:p-6">
+    <div className="py-4 space-y-6">
+      <div className="space-y-1">
+        <h2 className="text-xl sm:text-2xl font-bold">Пользователи</h2>
+        <p className="text-sm text-muted-foreground">Управление квотами и статистика пользователей</p>
+      </div>
+      <div>
         <div className="border rounded-lg overflow-x-auto">
           <Table>
             <TableHeader>
@@ -178,7 +177,7 @@ export function UsersTable() {
             </TableBody>
           </Table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

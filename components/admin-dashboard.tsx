@@ -85,9 +85,8 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
-        <div className="space-y-2">
+    <div className="space-y-6 sm:space-y-8">
+      <div className="space-y-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h1 className="text-2xl sm:text-3xl font-bold">{getPanelTitle()}</h1>
             <div className="flex items-center gap-2">
@@ -181,7 +180,6 @@ export function AdminDashboard() {
             </>
           )}
         </Tabs>
-      </div>
     </div>
   )
 }

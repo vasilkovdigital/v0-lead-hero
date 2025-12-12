@@ -71,13 +71,13 @@ export function FormsManager() {
   // Проверяем ошибку перед проверкой загрузки
   if (queryError) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
+      <div className="py-4">
+        <div className="flex flex-col items-center justify-center py-12">
           <AlertCircle className="h-12 w-12 text-destructive mb-4" />
           <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
           <p className="text-sm text-muted-foreground">{queryError.message}</p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
 
@@ -175,8 +175,8 @@ export function FormsManager() {
   // Нет форм - показываем приглашение создать
   if (forms.length === 0) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
+      <div className="py-4">
+        <div className="flex flex-col items-center justify-center py-12">
           <Users className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-lg font-medium mb-2">Форм пока нет</p>
           <p className="text-sm text-muted-foreground mb-6">Создайте форму для сбора лидов</p>
@@ -200,8 +200,8 @@ export function FormsManager() {
             onCreate={createForm}
             creating={createFormMutation.isPending}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
 

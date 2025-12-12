@@ -11,7 +11,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Trash2, Download, Filter, AlertCircle } from "lucide-react"
-import { Card } from "@/components/ui/card"
 import {
   Select,
   SelectContent,
@@ -118,18 +117,18 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
 
   if (error) {
     return (
-      <Card className="p-4 sm:p-6">
+      <div className="py-4">
         <div className="flex flex-col items-center justify-center py-8">
           <AlertCircle className="h-12 w-12 text-destructive mb-4" />
           <p className="text-lg font-medium mb-2">Ошибка загрузки</p>
           <p className="text-sm text-muted-foreground">{error.message}</p>
         </div>
-      </Card>
+      </div>
     )
   }
 
   return (
-    <Card className="p-4 sm:p-6">
+    <div className="py-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 sm:mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold">Лиды</h2>
@@ -238,6 +237,6 @@ export function LeadsTable({ formId: propFormId }: LeadsTableProps) {
         </Table>
       </div>
       {ConfirmDialog}
-    </Card>
+    </div>
   )
 }

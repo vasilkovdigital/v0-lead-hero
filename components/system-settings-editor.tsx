@@ -11,7 +11,6 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, CheckCircle2 } from "lucide-react"
 import { useSystemSettings, useSaveSystemSettings } from "@/lib/hooks"
@@ -62,18 +61,18 @@ export function SystemSettingsEditor() {
 
   if (queryError) {
     return (
-      <Card className="p-4 sm:p-6">
+      <div className="py-4">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Ошибка загрузки</AlertTitle>
           <AlertDescription>{queryError.message}</AlertDescription>
         </Alert>
-      </Card>
+      </div>
     )
   }
 
   return (
-    <Card className="p-4 sm:p-6">
+    <div className="py-4">
       <div className="space-y-6 sm:space-y-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
@@ -87,7 +86,7 @@ export function SystemSettingsEditor() {
           <Button 
             onClick={handleSave} 
             disabled={saveSettingsMutation.isPending} 
-            className="h-12 w-full sm:w-[200px] rounded-[18px] bg-black text-white hover:bg-black/90 disabled:opacity-50"
+            className="h-12 w-full sm:w-[200px] rounded-[18px] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {saveSettingsMutation.isPending ? "Сохранение..." : "Сохранить"}
           </Button>
@@ -166,6 +165,6 @@ export function SystemSettingsEditor() {
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }
